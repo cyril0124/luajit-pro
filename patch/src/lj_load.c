@@ -30,6 +30,33 @@
 #define PURPLE_COLOR "\033[35m"
 #define RESET_COLOR "\033[0m"
 
+#define LJP_INFO(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                         \
+    do {                                                                                                                                                                                                                                                                                                                                                                                                       \
+        fprintf(stdout, PURPLE_COLOR " [INFO] " RESET_COLOR fmt, __VA_ARGS__);                                                                                                                                                                                                                                                                                                                                 \
+        fflush(stdout);                                                                                                                                                                                                                                                                                                                                                                                        \
+    } while (0)
+
+#define LJP_WARNING(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                        \
+    do {                                                                                                                                                                                                                                                                                                                                                                                                       \
+        fprintf(stdout, "[%s:%s:%d]" PURPLE_COLOR " [WARNING] " RESET_COLOR fmt, __FILE__, __func__, __LINE__, __VA_ARGS__);                                                                                                                                                                                                                                                                                     \
+        fflush(stdout);                                                                                                                                                                                                                                                                                                                                                                                        \
+    } while (0)
+
+#define LJP_DEBUG(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                        \
+    do {                                                                                                                                                                                                                                                                                                                                                                                                       \
+        fprintf(stdout, "[%s:%s:%d]" PURPLE_COLOR " [DEBUG] " RESET_COLOR fmt, __FILE__, __func__, __LINE__, __VA_ARGS__);                                                                                                                                                                                                                                                                                     \
+        fflush(stdout);                                                                                                                                                                                                                                                                                                                                                                                        \
+    } while (0)
+
+#define LJP_ASSERT(condition, fmt, ...)                                                                                                                                                                                                                                                                                                                                                                            \
+    do {                                                                                                                                                                                                                                                                                                                                                                                                       \
+        if (!(condition)) {                                                                                                                                                                                                                                                                                                                                                                                    \
+            fprintf(stderr, "[%s:%s:%d] Assertion failed: " fmt "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__);                                                                                                                                                                                                                                                                                            \
+            fflush(stderr);                                                                                                                                                                                                                                                                                                                                                                                    \
+            exit(EXIT_FAILURE);                                                                                                                                                                                                                                                                                                                                                                                \
+        }                                                                                                                                                                                                                                                                                                                                                                                                      \
+    } while (0)
+
 typedef const char *(* LuaDoStringPtr)(const char*, const char*);
 char *file_transform(const char *filename, LuaDoStringPtr func);
 void string_transform(const char *str, size_t *output_size);
@@ -217,6 +244,9 @@ static const char *reader_file(lua_State *L, void *ud, size_t *size)
       if (strstr(first_line_buffer, substring) != NULL) {
         char *new_file = file_transform(ctx->filename, do_lua_stiring);
         // printf("[Debug]new_file => %s\n", new_file);fflush(stdout);
+        if(new_file == NULL) {
+          goto out;
+        }
         fclose(ctx->fp);
         ctx->fp = fopen(new_file, "rb");
         free(new_file);
@@ -225,7 +255,8 @@ static const char *reader_file(lua_State *L, void *ud, size_t *size)
       }
       fseek(ctx->fp, 0, SEEK_SET);
     } else {
-      assert(0 && "Cannot read the file!");
+      out:
+        LJP_WARNING("Cannot read file: %s, check if this file is empty.\n", ctx->filename);
     }
   }
 #endif // LUAJIT_SYNTAX_EXTEND
