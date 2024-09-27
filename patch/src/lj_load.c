@@ -57,8 +57,8 @@ const char *do_lua_stiring(const char *code_name, const char *str) {
         "local reset = \"\\27[0m\"\n"
         "local old_print = print\n"
         "package.path = package.path .. \";?.lua\" \n"
-        "function print(...) old_print(purple .. \"[comp_time]\" .. reset, ...) end\n"
-        "function printf(...) io.write(purple .. \"[comp_time]\" .. reset .. \"\t\" .. string.format(...)) end\n"
+        "function print(...) old_print(purple .. \"[comp_time] \" .. _G.__code_name__ .. reset, ...) end\n"
+        "function printf(...) io.write(purple .. \"[comp_time] \" .. _G.__code_name__ .. reset .. \"\t\" .. string.format(...)) end\n"
         "env_vars = {}\n"
         "setmetatable(env_vars, {\n"
         "    __index = function(table, key)\n"
@@ -100,6 +100,10 @@ const char *do_lua_stiring(const char *code_name, const char *str) {
         assert(0 && "Error executing luaCode");
       }
     }
+
+    // Set the global variable code_name in Lua
+    lua_pushstring(L, code_name); // Push code_name
+    lua_setglobal(L, "__code_name__"); // Set it as a global variable
 
     // Execute the Lua string
     if (luaL_dostring(L, str) != LUA_OK) {
