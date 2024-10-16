@@ -23,21 +23,21 @@
 
 typedef const char *(*LuaDoStringPtr)(const char *, const char *);
 
-#define INFO(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                         \
+#define LJP_INFO(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                         \
     do {                                                                                                                                                                                                                                                                                                                                                                                                       \
-        fprintf(stdout, PURPLE_COLOR " [INFO] " RESET_COLOR fmt, __VA_ARGS__);                                                                                                                                                                                                                                                                                                                                 \
+        fprintf(stdout, PURPLE_COLOR " [INFO] " RESET_COLOR fmt, ##__VA_ARGS__);                                                                                                                                                                                                                                                                                                                                 \
         fflush(stdout);                                                                                                                                                                                                                                                                                                                                                                                        \
     } while (0)
 
 #define LJP_WARNING(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                        \
     do {                                                                                                                                                                                                                                                                                                                                                                                                       \
-        fprintf(stdout, "[%s:%s:%d]" PURPLE_COLOR " [WARNING] " RESET_COLOR fmt, __FILE__, __func__, __LINE__, __VA_ARGS__);                                                                                                                                                                                                                                                                                     \
+        fprintf(stdout, "[%s:%s:%d]" PURPLE_COLOR " [WARNING] " RESET_COLOR fmt, __FILE__, __func__, __LINE__, ##__VA_ARGS__);                                                                                                                                                                                                                                                                                     \
         fflush(stdout);                                                                                                                                                                                                                                                                                                                                                                                        \
     } while (0)
 
 #define LJP_DEBUG(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                        \
     do {                                                                                                                                                                                                                                                                                                                                                                                                       \
-        fprintf(stdout, "[%s:%s:%d]" PURPLE_COLOR " [DEBUG] " RESET_COLOR fmt, __FILE__, __func__, __LINE__, __VA_ARGS__);                                                                                                                                                                                                                                                                                     \
+        fprintf(stdout, "[%s:%s:%d]" PURPLE_COLOR " [DEBUG] " RESET_COLOR fmt, __FILE__, __func__, __LINE__, ##__VA_ARGS__);                                                                                                                                                                                                                                                                                     \
         fflush(stdout);                                                                                                                                                                                                                                                                                                                                                                                        \
     } while (0)
 
@@ -1077,8 +1077,17 @@ const char *file_transform(const char *filename, LuaDoStringPtr func) {
 
         luaDoString = func;
 
+        {
+            const char *value = std::getenv("LJP_NO_PID_DIR");
+            if (value != nullptr && strcmp(value, "1") == 0) {
+                std::cout << "[luajit-pro] LJP_NO_PID_DIR is enabled" << std::endl;
+            } else {
+                cacheDir = cacheDir + "/" + std::to_string(getpid());
+            }
+        }
+
         if (!std::filesystem::exists(cacheDir)) {
-            if (!std::filesystem::create_directory(cacheDir)) {
+            if (!std::filesystem::create_directories(cacheDir)) {
                 LJP_ASSERT(false, "Failed to create folder.");
             }
         }
@@ -1093,6 +1102,7 @@ const char *file_transform(const char *filename, LuaDoStringPtr func) {
                         // std::cout << "[Debug][file_transform] remove => " << file << std::endl;
                         std::remove(file.c_str());
                     }
+                    std::filesystem::remove(cacheDir);
                 });
             }
         }
