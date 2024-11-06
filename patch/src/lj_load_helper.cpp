@@ -198,7 +198,7 @@ CustomLuaTransformer::CustomLuaTransformer(const std::string &filename) : filena
     }
 
     if (oldContentLines[0].find(std::string("--[[luajit-pro]]")) == std::string::npos) {
-        LJP_ASSERT(false, "File does not contain verilua comment in first line: %s", filename.c_str());
+        LJP_ASSERT(false, "File does not contain `--[[luajit-pro]]` comment in first line: %s", filename.c_str());
     } else {
         oldContentLines[0] = "--[[luajit-pro]] local ipairs, _tinsert = ipairs, table.insert";
     }
