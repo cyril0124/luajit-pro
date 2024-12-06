@@ -1,3 +1,4 @@
+#include <array>
 #include <cassert>
 #include <cctype>
 #include <cstddef>
@@ -12,6 +13,7 @@
 #include <sstream>
 #include <string>
 #include <unistd.h>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -23,25 +25,25 @@
 
 typedef const char *(*LuaDoStringPtr)(const char *, const char *);
 
-#define LJP_INFO(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                         \
+#define LJP_INFO(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                     \
     do {                                                                                                                                                                                                                                                                                                                                                                                                       \
-        fprintf(stdout, PURPLE_COLOR " [INFO] " RESET_COLOR fmt, ##__VA_ARGS__);                                                                                                                                                                                                                                                                                                                                 \
+        fprintf(stdout, PURPLE_COLOR " [INFO] " RESET_COLOR fmt, ##__VA_ARGS__);                                                                                                                                                                                                                                                                                                                               \
         fflush(stdout);                                                                                                                                                                                                                                                                                                                                                                                        \
     } while (0)
 
-#define LJP_WARNING(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                        \
+#define LJP_WARNING(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                  \
     do {                                                                                                                                                                                                                                                                                                                                                                                                       \
-        fprintf(stdout, "[%s:%s:%d]" PURPLE_COLOR " [WARNING] " RESET_COLOR fmt, __FILE__, __func__, __LINE__, ##__VA_ARGS__);                                                                                                                                                                                                                                                                                     \
+        fprintf(stdout, "[%s:%s:%d]" PURPLE_COLOR " [WARNING] " RESET_COLOR fmt, __FILE__, __func__, __LINE__, ##__VA_ARGS__);                                                                                                                                                                                                                                                                                 \
         fflush(stdout);                                                                                                                                                                                                                                                                                                                                                                                        \
     } while (0)
 
-#define LJP_DEBUG(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                        \
+#define LJP_DEBUG(fmt, ...)                                                                                                                                                                                                                                                                                                                                                                                    \
     do {                                                                                                                                                                                                                                                                                                                                                                                                       \
-        fprintf(stdout, "[%s:%s:%d]" PURPLE_COLOR " [DEBUG] " RESET_COLOR fmt, __FILE__, __func__, __LINE__, ##__VA_ARGS__);                                                                                                                                                                                                                                                                                     \
+        fprintf(stdout, "[%s:%s:%d]" PURPLE_COLOR " [DEBUG] " RESET_COLOR fmt, __FILE__, __func__, __LINE__, ##__VA_ARGS__);                                                                                                                                                                                                                                                                                   \
         fflush(stdout);                                                                                                                                                                                                                                                                                                                                                                                        \
     } while (0)
 
-#define LJP_ASSERT(condition, fmt, ...)                                                                                                                                                                                                                                                                                                                                                                            \
+#define LJP_ASSERT(condition, fmt, ...)                                                                                                                                                                                                                                                                                                                                                                        \
     do {                                                                                                                                                                                                                                                                                                                                                                                                       \
         if (!(condition)) {                                                                                                                                                                                                                                                                                                                                                                                    \
             fprintf(stderr, "[%s:%s:%d] Assertion failed: " fmt "\n", __FILE__, __func__, __LINE__, ##__VA_ARGS__);                                                                                                                                                                                                                                                                                            \
@@ -50,7 +52,54 @@ typedef const char *(*LuaDoStringPtr)(const char *, const char *);
         }                                                                                                                                                                                                                                                                                                                                                                                                      \
     } while (0)
 
-extern "C" const char *file_transform(const char *filename, LuaDoStringPtr func);
+extern "C" const char *ljp_file_transform(const char *filename, LuaDoStringPtr func);
+
+typedef struct {
+    std::string content;
+    uint32_t ptr;
+} StringFile;
+
+std::unordered_map<std::string, StringFile> stringMap;
+
+extern "C" void ljp_string_file_reset_ptr(const char *filename) {
+    auto it = stringMap.find(filename);
+    if (it != stringMap.end()) {
+        it->second.ptr = 0;
+    } else {
+        LJP_ASSERT(false, "File not found: %s\n", filename);
+    }
+}
+
+extern "C" size_t ljp_string_file_get_content(char *buf, size_t expectSize, const char *filename) {
+    auto it = stringMap.find(filename);
+    if (it != stringMap.end()) {
+        auto currSize = it->second.content.size() - it->second.ptr;
+        if (currSize < expectSize) {
+            std::copy(it->second.content.begin() + it->second.ptr, it->second.content.begin() + it->second.ptr + currSize, buf);
+            it->second.ptr = it->second.content.size();
+            return currSize;
+        } else {
+            std::copy(it->second.content.begin() + it->second.ptr, it->second.content.begin() + it->second.ptr + expectSize, buf);
+            it->second.ptr += expectSize;
+            return expectSize;
+        }
+    } else {
+        LJP_ASSERT(false, "File not found: %s\n", filename);
+    }
+}
+
+extern "C" char ljp_string_file_check_eof(const char *filename) {
+    auto it = stringMap.find(filename);
+    if (it != stringMap.end()) {
+        if (it->second.ptr == it->second.content.size()) {
+            return 1;
+        } else {
+            return 0;
+        }
+    } else {
+        LJP_ASSERT(false, "File not found: %s\n", filename);
+    }
+}
 
 namespace lua_transformer {
 std::vector<std::string> removeFiles;
@@ -142,16 +191,16 @@ class CustomLuaTransformer {
   public:
     std::vector<std::string> oldContentLines;
 
-    explicit CustomLuaTransformer(const std::string &filename);
+    explicit CustomLuaTransformer(const std::string &filename, const std::string &content, bool isFile);
     void tokenize();
     void parse(int idx);
     void dumpContentLines(bool hasLineNumbers);
 
   private:
     bool isFirstToken = true;
-    std::istream *stream_;
-    std::ifstream fstream_;
-    std::string filename_;
+    std::stringstream sstream;
+    std::ifstream fstream;
+    std::string filename;
 
     std::vector<Token> tokenVec;
     std::unordered_set<int> processedTokenLines;
@@ -179,21 +228,33 @@ class CustomLuaTransformer {
     void parseInclude(int idx);
 };
 
-CustomLuaTransformer::CustomLuaTransformer(const std::string &filename) : filename_(filename) {
-    fstream_ = std::ifstream(filename);
-    if (!std::filesystem::exists(filename)) {
-        LJP_ASSERT(false, "[CustomLuaTransformer] file does not exist: %s", filename.c_str());
-    }
-    stream_ = &fstream_;
+CustomLuaTransformer::CustomLuaTransformer(const std::string &filename, const std::string &content, bool isFile) : filename(filename) {
+    std::stringstream _sstream;
 
-    std::ifstream file(filename);
+    if (isFile) {
+        if (!std::filesystem::exists(filename)) {
+            LJP_ASSERT(false, "[CustomLuaTransformer] file does not exist: %s", filename.c_str());
+        }
+
+        fstream = std::ifstream(filename);
+        if (!fstream.is_open()) {
+            LJP_ASSERT(false, "[CustomLuaTransformer] Unable to open: %s", filename.c_str());
+        }
+
+        sstream << fstream.rdbuf();
+
+        fstream.clear();
+        fstream.seekg(0, std::ios::beg);
+
+        _sstream << fstream.rdbuf();
+    } else {
+        LJP_ASSERT(content != "", "Content is empty");
+        sstream << content;
+        _sstream << content;
+    }
+
     std::string line;
-
-    if (!file.is_open()) {
-        LJP_ASSERT(false, "[CustomLuaTransformer] Unable to open: %s", filename.c_str());
-    }
-
-    while (std::getline(file, line)) {
+    while (std::getline(_sstream, line)) {
         oldContentLines.push_back(line);
     }
 
@@ -202,15 +263,14 @@ CustomLuaTransformer::CustomLuaTransformer(const std::string &filename) : filena
     } else {
         oldContentLines[0] = "--[[luajit-pro]] local ipairs, _tinsert = ipairs, table.insert";
     }
-
-    file.close();
 }
 
 Token CustomLuaTransformer::_nextToken() {
-    auto &stream = *stream_;
+    auto &stream = sstream;
 
-    if (stream.bad())
+    if (stream.bad()) {
         return Token(TokenKind::EndOfFile, "", currentLine_, currentColumn_, currentLine_, currentColumn_);
+    }
 
     std::stringstream result;
     char c;
@@ -227,8 +287,9 @@ Token CustomLuaTransformer::_nextToken() {
         }
     }
 
-    if (stream.eof())
+    if (stream.eof()) {
         return Token(TokenKind::EndOfFile, "", startLine, startColumn, currentLine_, currentColumn_);
+    }
 
     startLine   = currentLine_;
     startColumn = currentColumn_;
@@ -361,8 +422,9 @@ Token CustomLuaTransformer::nextToken() {
 void CustomLuaTransformer::tokenize() {
     while (true) {
         auto token = nextToken();
-        if (token.kind == TokenKind::EndOfFile)
+        if (token.kind == TokenKind::EndOfFile) {
             break;
+        }
     }
 }
 
@@ -872,7 +934,7 @@ void CustomLuaTransformer::parseCompTime(int idx) {
     processedTokenColumns.insert(compTimeToken.startColumn);
 
     std::string compTimeContent = getContentBetween(leftBracketToken, rightBracketToken);
-    std::string luaCode         = luaDoString(std::string(filename_ + "/compTime/" + compTimeNameOpt.data + ":" + std::to_string(compTimeToken.startLine)).c_str(), compTimeContent.c_str());
+    std::string luaCode         = luaDoString(std::string(filename + "/compTime/" + compTimeNameOpt.data + ":" + std::to_string(compTimeToken.startLine)).c_str(), compTimeContent.c_str());
 
     if (replacedTokenLines.count(compTimeToken.startLine) > 0 && replacedTokenColumns.count(compTimeToken.startColumn) > 0) {
         return;
@@ -935,9 +997,9 @@ void CustomLuaTransformer::parseInclude(int idx) {
     std::string includePackage = getContentBetween(leftBracketToken, rightBracketToken);
 
     std::string luaCode = std::string("return assert(package.searchpath(") + includePackage + ", package.path))";
-    auto includeFile    = luaDoString(std::string(filename_ + "/include" + ":" + std::to_string(includeToken.startLine)).c_str(), luaCode.c_str());
+    auto includeFile    = luaDoString(std::string(filename + "/include" + ":" + std::to_string(includeToken.startLine)).c_str(), luaCode.c_str());
 
-    auto targetFilename = file_transform(includeFile, luaDoString);
+    auto targetFilename = ljp_file_transform(includeFile, luaDoString);
     if (targetFilename == nullptr) {
         LJP_WARNING("Unable to open file: %s, check if this file is empty.\n", includeFile);
 
@@ -955,13 +1017,26 @@ void CustomLuaTransformer::parseInclude(int idx) {
 
         return;
     }
-    std::ifstream file(targetFilename);
+
     std::string includeContent = "";
 
-    if (file.is_open()) {
-        std::string line;
-        while (std::getline(file, line)) {
+    std::stringstream ss;
+    std::ifstream fstream;
 
+    auto it = stringMap.find(targetFilename);
+    if (it == stringMap.end()) {
+        fstream.open(targetFilename);
+        LJP_ASSERT(fstream.is_open(), "Unable to open file: %s", targetFilename);
+
+        ss << fstream.rdbuf();
+    } else {
+        ss << it->second.content;
+    }
+    // LJP_ASSERT(it != stringMap.end(), "Cannot find includeFile: %s in stringMap", includeFile);
+
+    if (!ss.str().empty()) {
+        std::string line;
+        while (std::getline(ss, line)) {
             // Regular expressions for Lua comments
             std::regex singleLineComment(R"(--[^\n]*)");
             std::regex multiLineComment(R"(--\[\[[\s\S]*?\]\])");
@@ -986,9 +1061,11 @@ void CustomLuaTransformer::parseInclude(int idx) {
             includeContent += result + " ";
         }
 
-        file.close();
+        if (fstream.is_open()) {
+            fstream.close();
+        }
     } else {
-        LJP_ASSERT(false, "Unable to open file: %s", targetFilename);
+        LJP_ASSERT(false, "includeFile: %s is empty!", includeFile);
     }
 
     if (replacedTokenLines.count(includeToken.startLine) > 0 && replacedTokenColumns.count(includeToken.startColumn) > 0) {
@@ -1062,16 +1139,30 @@ void CustomLuaTransformer::dumpContentLines(bool hasLineNumbers) {
 
 } // namespace lua_transformer
 
+std::string execWithOutput(const std::string &cmd) {
+    std::array<char, 128> buffer;
+    std::string result;
+
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
+    LJP_ASSERT(pipe, "popen() failed!");
+
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+        result += buffer.data();
+    }
+
+    return result;
+}
+
 // Interface functions for lj_load.c
 extern "C" {
-
 using namespace lua_transformer;
 
-const char *file_transform(const char *filename, LuaDoStringPtr func) {
-    static std::string proccessedSuffix  = ".1.proccessed";
-    static std::string transformedSuffix = ".2.transformed";
+const char *ljp_file_transform(const char *filename, LuaDoStringPtr func) {
+    static std::string proccessedSuffix  = ".1.proccessed.lua";
+    static std::string transformedSuffix = ".2.transformed.lua";
     static std::string cacheDir          = LJ_PRO_CACHE_DIR;
     static bool isInit                   = false;
+    static bool keepFile                 = false;
     if (!isInit) {
         isInit = true;
 
@@ -1086,24 +1177,27 @@ const char *file_transform(const char *filename, LuaDoStringPtr func) {
             }
         }
 
-        if (!std::filesystem::exists(cacheDir)) {
-            if (!std::filesystem::create_directories(cacheDir)) {
-                LJP_ASSERT(false, "Failed to create folder.");
-            }
-        }
-
         {
             const char *value = std::getenv("LJP_KEEP_FILE");
             if (value != nullptr && strcmp(value, "1") == 0) {
                 std::cout << "[luajit-pro] LJP_KEEP_FILE is enabled" << std::endl;
+                keepFile = true;
             } else {
                 std::atexit([]() {
                     for (const auto &file : removeFiles) {
-                        // std::cout << "[Debug][file_transform] remove => " << file << std::endl;
+                        // std::cout << "[Debug][ljp_file_transform] remove => " << file << std::endl;
                         std::remove(file.c_str());
                     }
                     std::filesystem::remove(cacheDir);
                 });
+            }
+        }
+
+        if (keepFile) {
+            if (!std::filesystem::exists(cacheDir)) {
+                if (!std::filesystem::create_directories(cacheDir)) {
+                    LJP_ASSERT(false, "Failed to create folder.");
+                }
             }
         }
 
@@ -1149,15 +1243,20 @@ const char *file_transform(const char *filename, LuaDoStringPtr func) {
     std::string newFileName = cacheDir + "/" + filepath.filename().string();
 
     std::string proccesedFile = newFileName + proccessedSuffix;
-    std::string cppCMD        = "";
-    if (disablePreprocess) {
-        std::cout << "[luajit-pro] preprocess is disabled in file: " << filename << std::endl;
-        cppCMD = std::string("cp ") + filename + " " + proccesedFile;
+    std::string ppRet         = "";
+    if (keepFile) {
+        std::string cppCMD = "";
+        if (disablePreprocess) {
+            std::cout << "[luajit-pro] preprocess is disabled in file: " << filename << std::endl;
+            cppCMD = std::string("cp ") + filename + " " + proccesedFile;
+        } else {
+            cppCMD = std::string("cpp ") + filename + " -E | sed '/^#/d' > " + proccesedFile; // `-E`: Preprocess only
+        }
+        std::system(cppCMD.c_str());
+        removeFiles.push_back(proccesedFile);
     } else {
-        cppCMD = std::string("cpp ") + filename + " -E | sed '/^#/d' > " + proccesedFile; // `-E`: Preprocess only
+        ppRet = execWithOutput(std::string("cpp ") + filename + " -E | sed '/^#/d'"); // `-E`: Preprocess only
     }
-    std::system(cppCMD.c_str());
-    removeFiles.push_back(proccesedFile);
 
     // std::ifstream file(proccesedFile);
     // std::string line;
@@ -1166,34 +1265,51 @@ const char *file_transform(const char *filename, LuaDoStringPtr func) {
     // }
     // file.close();
 
-    CustomLuaTransformer transformer(proccesedFile);
-    transformer.tokenize();
-    transformer.parse(0);
+    CustomLuaTransformer *transformer;
+    if (keepFile) {
+        transformer = new CustomLuaTransformer(proccesedFile, "", true);
+    } else {
+        transformer = new CustomLuaTransformer(filename, ppRet, false);
+    }
+
+    transformer->tokenize();
+    transformer->parse(0);
     // transformer.dumpContentLines(false);
 
-    auto finalFilePath = newFileName + transformedSuffix;
-    removeFiles.push_back(finalFilePath);
+    if (keepFile) {
+        auto finalFilePath = newFileName + transformedSuffix;
+        removeFiles.push_back(finalFilePath);
 
-    std::ofstream outFile(finalFilePath, std::ios::trunc);
-    if (!outFile.is_open()) {
-        LJP_ASSERT(false, "Cannot write file: %s", finalFilePath.c_str());
+        std::ofstream outFile(finalFilePath, std::ios::trunc);
+        if (!outFile.is_open()) {
+            LJP_ASSERT(false, "Cannot write file: %s", finalFilePath.c_str());
+        }
+
+        for (const auto &line : transformer->oldContentLines) {
+            outFile << line << std::endl;
+        }
+        outFile.close();
+        outFile.flush();
     }
 
-    for (const auto &line : transformer.oldContentLines) {
-        outFile << line << std::endl;
-    }
-    outFile.close();
+    std::string filenameStr = filename;
+    if (stringMap.find(filenameStr) == stringMap.end()) {
+        std::string s;
+        for (const auto &line : transformer->oldContentLines) {
+            s = s + line + "\n";
+        }
 
-    char *c_filepath = (char *)malloc(finalFilePath.size() + 1);
-    if (c_filepath) {
-        std::copy(finalFilePath.begin(), finalFilePath.end(), c_filepath);
-        c_filepath[finalFilePath.size()] = '\0'; // Null-terminate
+        stringMap.emplace(filenameStr, StringFile{s, 0});
+    } else {
+        LJP_ASSERT(false, "Duplicate file: %s", filename);
     }
 
-    return c_filepath;
+    delete transformer;
+
+    return filename;
 }
 
-void string_transform(const char *str, size_t *output_size) {
+void ljp_string_transform(const char *str, size_t *output_size) {
     // TODO:
     // std::string inputString(str);
     // std::cout << "[Debug]transformedString => \n>>>\n" << inputString << "\n<<<" << std::endl;

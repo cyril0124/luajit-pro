@@ -24,7 +24,7 @@
 #include "lj_parse.h"
 
 #ifdef LUAJIT_SYNTAX_EXTEND
-#include "assert.h"
+#include <assert.h>
 #include <stdlib.h>
 
 #define PURPLE_COLOR "\033[35m"
@@ -58,9 +58,13 @@
     } while (0)
 
 typedef const char *(* LuaDoStringPtr)(const char*, const char*);
-char *file_transform(const char *filename, LuaDoStringPtr func);
-void string_transform(const char *str, size_t *output_size);
+char *ljp_file_transform(const char *filename, LuaDoStringPtr func);
+void ljp_string_transform(const char *str, size_t *output_size);
 void luaL_openlibs(lua_State *L);
+
+void ljp_string_file_reset_ptr(const char *filename);
+size_t ljp_string_file_get_content(char *buf, size_t expectSize, const char *filename);
+char ljp_string_file_check_eof(const char *filename);
 
 const char *do_lua_stiring(const char *code_name, const char *str) {
     static lua_State *L;
@@ -221,6 +225,7 @@ typedef struct FileReaderCtx {
 #ifdef LUAJIT_SYNTAX_EXTEND
   char filename[256]; /* Max 255 + 1 for null terminator. */
   unsigned char is_first_access;
+  unsigned char transformed;
 #endif // LUAJIT_SYNTAX_EXTEND
   FILE *fp;
   char buf[LUAL_BUFFERSIZE];
@@ -230,26 +235,34 @@ static const char *reader_file(lua_State *L, void *ud, size_t *size)
 {
   FileReaderCtx *ctx = (FileReaderCtx *)ud;
   UNUSED(L);
+
+#ifdef LUAJIT_SYNTAX_EXTEND
+  if(ctx->transformed) {
+    if (ljp_string_file_check_eof(ctx->filename)) return NULL;
+  } else {
+    if (feof(ctx->fp)) return NULL;
+  }
+#else
   if (feof(ctx->fp)) return NULL;
+#endif
 
 #ifdef LUAJIT_SYNTAX_EXTEND
   if(ctx->is_first_access == 1) {
     // The file read by LuaJIT is seperated by many parts to avoid stack overflow for some large files.
     ctx->is_first_access = 0;
 
-    char first_line_buffer[256];
-    const char* substring = "--[[luajit-pro]]";
+    static char first_line_buffer[256];
+    static const char* substring = "--[[luajit-pro]]";
 
     if (fgets(first_line_buffer, sizeof(first_line_buffer), ctx->fp) != NULL) {
       if (strstr(first_line_buffer, substring) != NULL) {
-        char *new_file = file_transform(ctx->filename, do_lua_stiring);
+        char *new_file = ljp_file_transform(ctx->filename, do_lua_stiring);
         // printf("[Debug]new_file => %s\n", new_file);fflush(stdout);
         if(new_file == NULL) {
           goto out;
         }
-        fclose(ctx->fp);
-        ctx->fp = fopen(new_file, "rb");
-        free(new_file);
+        ctx->transformed = 1;
+        ljp_string_file_reset_ptr(ctx->filename);
       } else {
         // The read file did not contains "--[[luajit-pro]]"
       }
@@ -259,9 +272,16 @@ static const char *reader_file(lua_State *L, void *ud, size_t *size)
         LJP_WARNING("Cannot read file: %s, check if this file is empty.\n", ctx->filename);
     }
   }
+
+  if(ctx->transformed == 1) {
+    *size = ljp_string_file_get_content(ctx->buf, sizeof(ctx->buf), ctx->filename);
+  } else {
+    *size = fread(ctx->buf, 1, sizeof(ctx->buf), ctx->fp);
+  }
+#else
+  *size = fread(ctx->buf, 1, sizeof(ctx->buf), ctx->fp);
 #endif // LUAJIT_SYNTAX_EXTEND
 
-  *size = fread(ctx->buf, 1, sizeof(ctx->buf), ctx->fp);
   return *size > 0 ? ctx->buf : NULL;
 }
 
@@ -293,6 +313,7 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
 
   // A flag that indicates whether it is the first access to the file.
   ctx.is_first_access = 1;
+  ctx.transformed = 0;
 #endif // LUAJIT_SYNTAX_EXTEND
 
   status = lua_loadx(L, reader_file, &ctx, chunkname, mode);
@@ -330,7 +351,7 @@ static const char *reader_string(lua_State *L, void *ud, size_t *size)
   ctx->size = 0;
 
 #ifdef LUAJIT_SYNTAX_EXTEND
-  string_transform(ctx->str, size);
+  ljp_string_transform(ctx->str, size);
 #endif // LUAJIT_SYNTAX_EXTEND
 
   return ctx->str;
