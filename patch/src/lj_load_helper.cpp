@@ -1218,15 +1218,15 @@ const char *ljp_file_transform(const char *filename, LuaDoStringPtr func) {
 
     // std::cout << "[Debug] inputFile => " << filename << std::endl;
 
-    bool disablePreprocess = false;
+    bool enablePreprocess = false;
     std::string firstLine;
     if (std::getline(inputFile, firstLine)) {
         // std::cout << "[Debug] first line => " << firstLine << std::endl;
-        std::regex pattern(R"(preprocess:\s*(\w+))"); // You can DISABLE preprocess by adding "preprocess: false" at the first line of the file after the "--[[luajit-pro]]" comment. e.g. "--[[luajit-pro]] preprocess: false"
+        std::regex pattern(R"(preprocess:\s*(\w+))"); // You can ENABLE preprocess by adding "preprocess: true" at the first line of the file after the "--[[luajit-pro]]" comment. e.g. "--[[luajit-pro]] preprocess: true"
         std::smatch matches;
 
         if (std::regex_search(firstLine, matches, pattern)) {
-            disablePreprocess = matches[1] == "false";
+            enablePreprocess = matches[1] == "true";
         }
 
         if (firstLine.find("--[[luajit-pro]]") == std::string::npos) {
@@ -1246,16 +1246,26 @@ const char *ljp_file_transform(const char *filename, LuaDoStringPtr func) {
     std::string ppRet         = "";
     if (keepFile) {
         std::string cppCMD = "";
-        if (disablePreprocess) {
-            std::cout << "[luajit-pro] preprocess is disabled in file: " << filename << std::endl;
-            cppCMD = std::string("cp ") + filename + " " + proccesedFile;
-        } else {
+        if (enablePreprocess) {
+            std::cout << "[luajit-pro] preprocess is enabled in file: " << filename << std::endl;
             cppCMD = std::string("cpp ") + filename + " -E | sed '/^#/d' > " + proccesedFile; // `-E`: Preprocess only
+        } else {
+            cppCMD = std::string("cp ") + filename + " " + proccesedFile;
         }
         std::system(cppCMD.c_str());
         removeFiles.push_back(proccesedFile);
     } else {
-        ppRet = execWithOutput(std::string("cpp ") + filename + " -E | sed '/^#/d'"); // `-E`: Preprocess only
+        if (enablePreprocess) {
+            ppRet = execWithOutput(std::string("cpp ") + filename + " -E | sed '/^#/d'"); // `-E`: Preprocess only
+        } else {
+            std::ifstream file(filename);
+            std::ostringstream buffer;
+            buffer << file.rdbuf();
+
+            ppRet = buffer.str();
+
+            file.close();
+        }
     }
 
     // std::ifstream file(proccesedFile);
