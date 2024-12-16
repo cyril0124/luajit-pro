@@ -259,17 +259,17 @@ static const char *reader_file(lua_State *L, void *ud, size_t *size)
         char *new_file = ljp_file_transform(ctx->filename, do_lua_stiring);
         // printf("[Debug]new_file => %s\n", new_file);fflush(stdout);
         if(new_file == NULL) {
-          goto out;
+          LJP_WARNING("new_file is NULL! Cannot read file: %s, check if this file is empty. errno: %s\n", ctx->filename, strerror(errno));
+        } else {
+          ctx->transformed = 1;
+          ljp_string_file_reset_ptr(ctx->filename);
         }
-        ctx->transformed = 1;
-        ljp_string_file_reset_ptr(ctx->filename);
       } else {
         // The read file did not contains "--[[luajit-pro]]"
       }
       fseek(ctx->fp, 0, SEEK_SET);
     } else {
-      out:
-        LJP_WARNING("Cannot read file: %s, check if this file is empty.\n", ctx->filename);
+      LJP_WARNING("Cannot read file: %s, check if this file is empty. errno: %s\n", ctx->filename, strerror(errno));
     }
   }
 

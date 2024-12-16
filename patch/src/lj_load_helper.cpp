@@ -248,7 +248,7 @@ CustomLuaTransformer::CustomLuaTransformer(const std::string &filename, const st
 
         _sstream << fstream.rdbuf();
     } else {
-        LJP_ASSERT(content != "", "Content is empty");
+        LJP_ASSERT(content != "", "Content is empty, filename: %s, errno: %s", filename.c_str(), strerror(errno));
         sstream << content;
         _sstream << content;
     }
@@ -1234,7 +1234,7 @@ const char *ljp_file_transform(const char *filename, LuaDoStringPtr func) {
             return filename;
         }
     } else {
-        LJP_WARNING("Cannot read file %s, check if this file is empty.\n", filename);
+        LJP_WARNING("Cannot read file %s, check if this file is empty. errno: %s\n", filename, strerror(errno));
         return nullptr;
     }
     inputFile.close();
@@ -1256,6 +1256,7 @@ const char *ljp_file_transform(const char *filename, LuaDoStringPtr func) {
         removeFiles.push_back(proccesedFile);
     } else {
         if (enablePreprocess) {
+            std::cout << "[luajit-pro] preprocess is enabled in file: " << filename << std::endl;
             ppRet = execWithOutput(std::string("cpp ") + filename + " -E | sed '/^#/d'"); // `-E`: Preprocess only
         } else {
             std::ifstream file(filename);
