@@ -1157,7 +1157,12 @@ std::string execWithOutput(const std::string &cmd) {
 extern "C" {
 using namespace lua_transformer;
 
+#ifndef LEGACY
+const char *transform_lua(const char *file_path);
+#endif
+
 const char *ljp_file_transform(const char *filename, LuaDoStringPtr func) {
+#ifdef LEGACY
     static std::string proccessedSuffix  = ".1.proccessed.lua";
     static std::string transformedSuffix = ".2.transformed.lua";
     static std::string cacheDir          = LJ_PRO_CACHE_DIR;
@@ -1316,6 +1321,15 @@ const char *ljp_file_transform(const char *filename, LuaDoStringPtr func) {
     }
 
     delete transformer;
+#else
+    auto content = transform_lua(filename);
+    auto filenameStr = std::string(filename);
+    if (stringMap.find(filenameStr) == stringMap.end()) {
+        stringMap.emplace(filenameStr, StringFile{std::string(content), 0});
+    } else {
+        LJP_ASSERT(false, "Duplicate file: %s", filename);
+    }
+#endif
 
     return filename;
 }

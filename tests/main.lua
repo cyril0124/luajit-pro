@@ -1,0 +1,97 @@
+--[[luajit-pro]]
+
+function __LJP:COMP_TIME()
+    print("hjjj")
+    local a = 123
+
+    local b = require "another"
+
+    local b = 
+    124
+
+    for i = 1, 10 do
+        print(i)
+    end
+
+    for i, v in ipairs({1, 2, 3}) do
+        print(1)
+    end
+
+    do
+
+
+        local a = 123
+    end
+
+    if a == 1 then
+        print("a is 1")
+    elseif a == 2 then
+        print("a is 2")
+    else
+        print("a is not 1 or 2")
+    end
+
+    a = 4
+    
+    return "do" .. "end"
+end
+
+function __LJP:COMP_TIME()
+    return "do" ..
+    "end"
+end
+
+function __LJP:COMP_TIME()
+    return "--" ..
+    123 + 
+    455
+end
+
+function __LJP:COMP_TIME()
+    local hello = 123
+    return "--" ..
+    123 + 
+    hello
+end
+
+function __LJP:COMP_TIME()
+    local hello = {123}
+    return "--" ..
+    123 + 
+    hello[1]
+end
+
+function __LJP:COMP_TIME()
+    local hello = 123
+    return "--" ..
+    123 + 
+    hello
+end
+
+function __LJP:COMP_TIME()
+    local hello = {y = 123}
+    return "--" ..
+    123 + 
+    hello.y
+end
+
+function _G.__ljp:comp_time(hello_world)
+    local hello = {y = 123}
+    return ("--" ..
+    123 + 
+    hello.y)
+end
+
+-- function __LJP:COMP_TIME()
+--     local hello = 123
+--     return "hello" ..
+--     123 + 
+--     hello()
+-- end
+
+-- __ljp:include("another")
+-- __LJP:INCLUDE("another")
+-- _G.__ljp:include("another")
+
+local b = 0xFFFFFFFFFFFFFFFFULL
+a = bit.lshift(a, 12345678ULL)

@@ -1,0 +1,20 @@
+[package]
+name = "luajit_pro_helper"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+darklua = { git = "https://github.com/cyril0124/darklua", rev = "2e9430f753b0b0934e355b430c9da9c85f93460c" }
+full_moon = {version = "1.2.0", features = ["lua52", "luau", "luajit"]}
+stylua = { version = "2.0.2", features = ["lua53", "lua52", "luau", "luajit"] }
+mlua = { version = "0.10.3", features = ["luajit52", "vendored"] }
+once_cell = "1.20.3"
+cargo_metadata = "0.19.1"
+
+[lib]
+name = "luajit_pro_helper"
+path = "src/lib.rs"
+crate-type = ["cdylib", "staticlib"]
+
+[features]
+print-time = []

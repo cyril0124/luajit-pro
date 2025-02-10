@@ -1,1 +1,6 @@
 luajit_backup/
+luarocks*
+target/
+.luajit_pro
+.vscode
+tmp
