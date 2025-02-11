@@ -19,11 +19,6 @@ use full_moon::{
 };
 use mlua::prelude::*;
 
-use once_cell::sync::Lazy;
-
-static LJP_KEEP_FILE: Lazy<String> =
-    Lazy::new(|| env::var("LJP_KEEP_FILE").unwrap_or_else(|_| String::from("0")));
-
 fn lua_dostring(code_name: &str, code: &str) -> String {
     thread_local! {
         static LUA: RefCell<Lua> = RefCell::new(unsafe {
@@ -869,11 +864,11 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
             new_content = convert_luau_to_lua(&new_content);
         }
 
-        if first_line.contains("format") {
-            if first_line.contains("no-comment") {
-                new_content = remove_lua_comments(&new_content);
-            }
+        if first_line.contains("no-comment") {
+            new_content = remove_lua_comments(&new_content);
+        }
 
+        if first_line.contains("format") {
             let ast = full_moon::parse(&new_content).expect("Failed to parse generated AST");
             let ret_ast = stylua_lib::format_ast(
                 ast,
@@ -883,21 +878,6 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
             )
             .unwrap();
             new_content = ret_ast.to_string();
-        }
-
-        if *LJP_KEEP_FILE == "1" {
-            let filename = Path::new(lua_file_path)
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap();
-            let out_file_path = format!("{}/{}.ljp_out", OUTPUT_DIR, filename);
-
-            std::fs::create_dir_all(OUTPUT_DIR).expect("Failed to create directory");
-            File::create(out_file_path.as_str())
-                .expect(format!("Failed to create file => {}", out_file_path).as_str())
-                .write_all(new_content.as_bytes())
-                .expect("Failed to write to file");
         }
 
         std::fs::write(cached_file, &new_content).expect("Failed to write to file");

@@ -8,7 +8,6 @@ darklua = { git = "https://github.com/cyril0124/darklua", rev = "2e9430f753b0b09
 full_moon = {version = "1.2.0", features = ["lua52", "luau", "luajit"]}
 stylua = { version = "2.0.2", features = ["lua53", "lua52", "luau", "luajit"] }
 mlua = { version = "0.10.3", features = ["luajit52", "vendored"] }
-once_cell = "1.20.3"
 cargo_metadata = "0.19.1"
 
 [lib]

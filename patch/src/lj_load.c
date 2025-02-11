@@ -288,6 +288,80 @@ static const char *reader_file(lua_State *L, void *ud, size_t *size)
 LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
 			      const char *mode)
 {
+#ifdef LUAJIT_SYNTAX_EXTEND
+  static char init = 0;
+  if(init == 0) {
+    init = 1;
+    const char *code_str =
+"local function search_for(module_name, suffix, path, tried)\n"
+"   for entry in path:gmatch(\"[^;]+\") do\n"
+"      local slash_name = module_name:gsub(\"%.\", \"/\")\n"
+"      local filename = entry:gsub(\"?\", slash_name)\n"
+"      local luau_filename = filename:gsub(\"%\.lua$\", suffix)\n"
+"      local fd = io.open(luau_filename, \"rb\")\n"
+"      if fd then\n"
+"         return luau_filename, fd, tried\n"
+"      end\n"
+"      table.insert(tried, \"no file '\" .. luau_filename .. \"'\")\n"
+"   end\n"
+"   return nil, nil, tried\n"
+"end\n"
+"\n"
+"local function search_module(module_name)\n"
+"   local found\n"
+"   local fd\n"
+"   local tried = {}\n"
+"   local path = os.getenv(\"LUAU_PATH\") or package.path\n"
+"   found, fd, tried = search_for(module_name, \".luau\", path, tried)\n"
+"   if found then\n"
+"      return found, fd\n"
+"   end\n"
+"   found, fd, tried = search_for(module_name, \".lua\", path, tried)\n"
+"   if found then\n"
+"      return found, fd\n"
+"   end\n"
+"   return nil, nil, tried\n"
+"end\n"
+"\n"
+"local function luau_package_loader(module_name)\n"
+"   local found_filename, fd, tried = search_module(module_name)\n"
+"   if found_filename then\n"
+"      fd:close()\n"
+"      local chunk, err = loadfile(found_filename)\n"
+"      if chunk then\n"
+"         return function(modname, loader_data)\n"
+"            if loader_data == nil then\n"
+"               loader_data = found_filename\n"
+"            end\n"
+"            local ret = chunk(modname, loader_data)\n"
+"            package.loaded[module_name] = ret\n"
+"            return ret\n"
+"         end, found_filename\n"
+"      else\n"
+"         error(\"Internal Compiler Error: luajit-pro produced invalid Lua.\\n\\n\" .. err)\n"
+"      end\n"
+"   end\n"
+"   return table.concat(tried, \"\\n\\t\")\n"
+"end\n"
+"\n"
+"if _G.package.searchers then\n"
+"   table.insert(_G.package.searchers, 2, luau_package_loader)\n"
+"else\n"
+"   table.insert(_G.package.loaders, 2, luau_package_loader)\n"
+"end\n";
+    if (luaL_dostring(L, code_str) != LUA_OK) {
+      // If execution fails, get the error message
+      const char *err_msg = lua_tostring(L, -1);
+      printf("Error executing Lua code: %s\n", err_msg);
+
+      // Clean up the stack by popping the error message
+      lua_pop(L, 1); // Remove the error message from the stack
+      lua_close(L); // Close the Lua state
+      assert(0 && "Error executing initialize luaCode");
+    }
+  }
+#endif
+
   FileReaderCtx ctx;
   int status;
   const char *chunkname;

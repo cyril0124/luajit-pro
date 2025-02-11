@@ -997,7 +997,6 @@ dependencies = [
  "darklua",
  "full_moon",
  "mlua",
- "once_cell",
  "stylua",
 ]
 
