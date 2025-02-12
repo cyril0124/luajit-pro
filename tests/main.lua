@@ -1,4 +1,4 @@
---[[luajit-pro]]
+--[[luajit-pro]] --[[no-1cache]] --[[format, no-comment]] --[[{FEAT = 1}]]
 
 function __LJP:COMP_TIME()
     print("hjjj")
@@ -111,3 +111,7 @@ _G.__LJP:include "tests/another"
 
 local b = 0xFFFFFFFFFFFFFFFFULL
 a = bit.lshift(a, 12345678ULL)
+
+if _G.FEAT then
+    print("hello from inject FEAT")
+end
