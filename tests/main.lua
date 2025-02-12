@@ -4,7 +4,7 @@ function __LJP:COMP_TIME()
     print("hjjj")
     local a = 123
 
-    local b = require "another"
+    local b = require "tests/another"
 
     local b = 
     124
@@ -19,7 +19,6 @@ function __LJP:COMP_TIME()
 
     do
 
-
         local a = 123
     end
 
@@ -32,7 +31,7 @@ function __LJP:COMP_TIME()
     end
 
     a = 4
-    
+
     return "do " .. "end"
 end
 
@@ -40,6 +39,7 @@ function __LJP:COMP_TIME()
     return "do " ..
     "end"
 end
+
 
 function __LJP:COMP_TIME()
     return "--" ..
@@ -103,11 +103,11 @@ end
 --     hello()
 -- end
 
-__ljp:include("another")
-__LJP:INCLUDE("another")
-_G.__ljp:include("another")
+__ljp:include("tests/another")
+__LJP:INCLUDE("tests/another")
+_G.__ljp:include("tests/another")
 
-_G.__LJP:include "another"
+_G.__LJP:include "tests/another"
 
 local b = 0xFFFFFFFFFFFFFFFFULL
 a = bit.lshift(a, 12345678ULL)

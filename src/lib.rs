@@ -66,6 +66,12 @@ fn lua_dostring(code_name: &str, code: &str) -> String {
             return str
         end
     end
+
+    _G.__LJP = setmetatable({}, {
+        __index = function(t, key)
+            return function() end
+        end
+    })
                 "#).exec().unwrap();
             lua
         });
@@ -777,10 +783,16 @@ impl VisitorMut for LuaTransformer {
                         func_arg
                     ),
                 );
-                let include_code = std::fs::read_to_string(include_file.clone())
-                    .expect(format!("Failed to read file => {}", include_file).as_str())
-                    .remove_lua_comments()
-                    .replace("\n", " ");
+                let mut include_code = std::fs::read_to_string(include_file.clone())
+                    .expect(format!("Failed to read file => {}", include_file).as_str());
+                if let Some(first_line) = include_code.lines().next() {
+                    if first_line.contains("--[[luajit-pro]]") {
+                        // Recursively transform the included code
+                        include_code = transform_lua_code(&include_code, &include_file);
+                    }
+                }
+
+                include_code = include_code.remove_lua_comments().replace("\n", " ");
 
                 match node.prefix() {
                     Prefix::Name(token) => Prefix::Name(insert_before_token(
@@ -839,10 +851,6 @@ impl VisitorMut for LuaTransformer {
 
 const OUTPUT_DIR: &str = ".luajit_pro";
 
-thread_local! {
-    static TRANSFORMER: RefCell<LuaTransformer> = RefCell::new(LuaTransformer::new());
-}
-
 fn get_mtime(file_path: &str) -> SystemTime {
     match std::fs::metadata(file_path) {
         Ok(metadata) => match metadata.modified() {
@@ -851,6 +859,39 @@ fn get_mtime(file_path: &str) -> SystemTime {
         },
         Err(e) => panic!("Failed to get metadata => {}", e.to_string()),
     }
+}
+
+pub fn transform_lua_code(code: &str, lua_file_path: &str) -> String {
+    let ast = full_moon::parse(&code).unwrap();
+
+    let mut transformer = LuaTransformer::new();
+    transformer.file_path = Some((lua_file_path.to_string()).to_string());
+    let new_ast = transformer.visit_ast(ast);
+
+    let mut new_content = new_ast.to_string();
+
+    let first_line = code.lines().next().unwrap_or("");
+    if first_line.contains("luau") {
+        new_content = convert_luau_to_lua(&new_content);
+    }
+
+    if first_line.contains("no-comment") {
+        new_content = remove_lua_comments(&new_content);
+    }
+
+    if first_line.contains("format") {
+        let ast = full_moon::parse(&new_content).expect("Failed to parse generated AST");
+        let ret_ast = stylua_lib::format_ast(
+            ast,
+            stylua_lib::Config::new(),
+            None,
+            stylua_lib::OutputVerification::None,
+        )
+        .unwrap();
+        new_content = ret_ast.to_string();
+    }
+
+    new_content
 }
 
 #[no_mangle]
@@ -896,52 +937,22 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
 
     let content = std::fs::read_to_string(lua_file_path)
         .expect(format!("Failed to read file => {}", lua_file_path).as_str());
-    let ast = full_moon::parse(&content).unwrap();
+    let new_content = transform_lua_code(&content, lua_file_path);
+    std::fs::write(cached_file, &new_content).expect("Failed to write to file");
 
-    TRANSFORMER.with(|transformer| {
-        let mut transformer = transformer.borrow_mut();
-        transformer.file_path = Some((lua_file_path.to_string()).to_string());
-        let new_ast = transformer.visit_ast(ast);
+    let c_str = CString::new(new_content).unwrap();
 
-        let mut new_content = new_ast.to_string();
+    #[cfg(feature = "print-time")]
+    {
+        let duration = start.elapsed();
+        println!(
+            "[luajit_pro_heler] Time elapsed in transform_lua() is: {:?}, file: {}",
+            duration, lua_file_path
+        );
+        std::io::stdout().flush().unwrap();
+    }
 
-        let first_line = content.lines().next().unwrap_or("");
-        if first_line.contains("luau") {
-            new_content = convert_luau_to_lua(&new_content);
-        }
-
-        if first_line.contains("no-comment") {
-            new_content = remove_lua_comments(&new_content);
-        }
-
-        if first_line.contains("format") {
-            let ast = full_moon::parse(&new_content).expect("Failed to parse generated AST");
-            let ret_ast = stylua_lib::format_ast(
-                ast,
-                stylua_lib::Config::new(),
-                None,
-                stylua_lib::OutputVerification::None,
-            )
-            .unwrap();
-            new_content = ret_ast.to_string();
-        }
-
-        std::fs::write(cached_file, &new_content).expect("Failed to write to file");
-
-        let c_str = CString::new(new_content).unwrap();
-
-        #[cfg(feature = "print-time")]
-        {
-            let duration = start.elapsed();
-            println!(
-                "[luajit_pro_heler] Time elapsed in transform_lua() is: {:?}, file: {}",
-                duration, lua_file_path
-            );
-            std::io::stdout().flush().unwrap();
-        }
-
-        c_str.into_raw()
-    })
+    c_str.into_raw()
 }
 
 #[test]
