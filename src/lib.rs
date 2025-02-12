@@ -701,6 +701,7 @@ fn get_func_call_name(func_call: &FunctionCall) -> (String, String) {
                             );
                             arguments.to_string()
                         }
+                        FunctionArgs::String(str) => str.to_string(),
                         _ => panic!("Unexpected Call {}", method_call.args().to_string()),
                     };
                 }
@@ -768,18 +769,6 @@ impl VisitorMut for LuaTransformer {
             full_func_name.to_uppercase().as_str(),
             "__LJP:INCLUDE" | "_G.__LJP:INCLUDE"
         ) {
-            #[cfg(test)]
-            let new_prefix = {
-                match node.prefix() {
-                    Prefix::Name(token) => Prefix::Name(insert_before_token(
-                        &insert_before_token(&token, "some code "),
-                        "--[==[ ",
-                    )),
-                    _ => panic!("Unexpected Prefix {:?}", node.prefix()),
-                }
-            };
-
-            #[cfg(not(test))]
             let new_prefix = {
                 let include_file = lua_dostring(
                     "__LJP:INCLUDE",
@@ -796,7 +785,7 @@ impl VisitorMut for LuaTransformer {
                 match node.prefix() {
                     Prefix::Name(token) => Prefix::Name(insert_before_token(
                         &insert_before_token(&token, include_code.as_str()),
-                        "--[==[ ",
+                        " --[=====[ ",
                     )),
                     _ => panic!("Unexpected Prefix {:?}", node.prefix()),
                 }
@@ -821,10 +810,13 @@ impl VisitorMut for LuaTransformer {
                                 } => FunctionArgs::Parentheses {
                                     parentheses: ContainedSpan::new(
                                         parentheses.tokens().0.clone(),
-                                        insert_after_token(parentheses.tokens().1, " --]==]"),
+                                        insert_after_token(parentheses.tokens().1, " --]=====]"),
                                     ),
                                     arguments: arguments,
                                 },
+                                FunctionArgs::String(str) => {
+                                    FunctionArgs::String(insert_after_token(&str, " --]=====]"))
+                                }
                                 _ => panic!(
                                     "Unexpected Call {}",
                                     method_call.args().clone().to_string()

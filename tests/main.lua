@@ -103,9 +103,11 @@ end
 --     hello()
 -- end
 
--- __ljp:include("another")
--- __LJP:INCLUDE("another")
--- _G.__ljp:include("another")
+__ljp:include("another")
+__LJP:INCLUDE("another")
+_G.__ljp:include("another")
+
+_G.__LJP:include "another"
 
 local b = 0xFFFFFFFFFFFFFFFFULL
 a = bit.lshift(a, 12345678ULL)
