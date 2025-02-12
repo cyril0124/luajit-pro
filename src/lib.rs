@@ -1,4 +1,5 @@
 use std::ffi::{c_char, CStr, CString};
+use std::io::BufRead;
 use std::path::Path;
 use std::time::{Duration, Instant, SystemTime};
 use std::{cell::RefCell, env, fs::File, io::Write, str, vec};
@@ -902,6 +903,18 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
     let c_str = unsafe { CStr::from_ptr(file_path) };
     let lua_file_path = c_str.to_str().unwrap();
 
+    let first_line = {
+        let file =
+            File::open(lua_file_path).expect(&format!("Failed to open file => {}", lua_file_path));
+        let mut reader = std::io::BufReader::new(file);
+        let mut first_line = String::new();
+        reader.read_line(&mut first_line).unwrap();
+
+        first_line
+    };
+
+    let no_cache = first_line.contains("no-cache");
+
     let build_cache_dir = format!("{}/build_cache", OUTPUT_DIR);
     let cached_file = format!(
         "{}/{}",
@@ -912,31 +925,33 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
             .to_str()
             .unwrap()
     );
+
     if !std::fs::exists(&build_cache_dir).unwrap_or(false) {
         std::fs::create_dir_all(&build_cache_dir).expect("Failed to create directory");
     } else {
-        if std::fs::exists(&cached_file).unwrap_or(false) {
-            if get_mtime(&lua_file_path) <= get_mtime(&cached_file) {
-                let code = std::fs::read_to_string(&cached_file).unwrap();
-                let c_str = CString::new(code).unwrap();
+        if !no_cache {
+            if std::fs::exists(&cached_file).unwrap_or(false) {
+                if get_mtime(&lua_file_path) <= get_mtime(&cached_file) {
+                    let code = std::fs::read_to_string(&cached_file).unwrap();
+                    let c_str = CString::new(code).unwrap();
 
-                #[cfg(feature = "print-time")]
-                {
-                    let duration = start.elapsed();
-                    println!(
-                        "[luajit_pro_heler] Time elapsed(cached) in transform_lua() is: {:?}, file: {}",
-                        duration, lua_file_path
-                    );
-                    std::io::stdout().flush().unwrap();
+                    #[cfg(feature = "print-time")]
+                    {
+                        let duration = start.elapsed();
+                        println!(
+                            "[luajit_pro_heler] Time elapsed(cached) in transform_lua() is: {:?}, file: {}",
+                            duration, lua_file_path
+                        );
+                        std::io::stdout().flush().unwrap();
+                    }
+
+                    return c_str.into_raw();
                 }
-
-                return c_str.into_raw();
             }
         }
     }
 
-    let content = std::fs::read_to_string(lua_file_path)
-        .expect(format!("Failed to read file => {}", lua_file_path).as_str());
+    let content = std::fs::read_to_string(lua_file_path).unwrap();
     let new_content = transform_lua_code(&content, lua_file_path);
     std::fs::write(cached_file, &new_content).expect("Failed to write to file");
 
