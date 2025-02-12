@@ -33,11 +33,11 @@ function __LJP:COMP_TIME()
 
     a = 4
     
-    return "do" .. "end"
+    return "do " .. "end"
 end
 
 function __LJP:COMP_TIME()
-    return "do" ..
+    return "do " ..
     "end"
 end
 
@@ -81,6 +81,20 @@ function _G.__ljp:comp_time(hello_world)
     123 + 
     hello.y)
 end
+
+function _G.__LJP:comp_time(aa)
+    local cfg = { a = 123 }
+    cfg.a = 12
+
+
+    ("hello"):format("hello")
+
+    return [[
+        -- any comment will be removed!!!
+        print("hello from comp time(aa)")
+    ]]
+end
+
 
 -- function __LJP:COMP_TIME()
 --     local hello = 123
