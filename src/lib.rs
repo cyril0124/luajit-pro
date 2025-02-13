@@ -1063,7 +1063,13 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
         } else {
             result = first_line;
         }
-        result.push_str(&new_content[first_newline_pos..]);
+
+        let new_first_line = &new_content[..first_newline_pos];
+        if new_first_line.contains("--[[luajit-pro]]") {
+            result.push_str(&new_content[first_newline_pos..]);
+        } else {
+            result.push_str(&new_content);
+        }
         result
     } else {
         new_content
