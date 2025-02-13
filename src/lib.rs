@@ -410,6 +410,9 @@ fn inject_global_vals(input: &str, input_param_table: HashMap<&str, String>) -> 
             .process(&mut block, &context)
             .expect("Failed to inject global value");
     }
+    darklua_core::rules::RemoveUnusedIfBranch::default()
+        .process(&mut block, &context)
+        .expect("Failed to remove unused if branch");
 
     let mut generator = darklua_core::generator::TokenBasedLuaGenerator::new(input);
     generator.write_block(&block);
