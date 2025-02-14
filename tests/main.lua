@@ -32,6 +32,10 @@ function __LJP:COMP_TIME()
 
     a = 4
 
+    if not _G.FEAT then
+        assert(false)
+    end
+
     return "do " .. "end"
 end
 

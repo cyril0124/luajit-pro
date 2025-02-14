@@ -40,8 +40,8 @@ fn lua_dostring(code_name: &str, code: &str) -> String {
         io.write(purple .. "[comp_time] " .. _G.__code_name__ .. reset .. "\t" .. string.format(...))
     end
     
-    env_vars = {}
-    setmetatable(env_vars, {
+    _G.env_vars = {}
+    setmetatable(_G.env_vars, {
         __index = function(table, key)
             local value = os.getenv(key)
             if value == nil then
@@ -495,15 +495,52 @@ impl StringLuaCommentRemove for String {
 
 struct LuaTransformer {
     pub file_path: Option<String>,
+    pub input_param_list: Option<Vec<(String, String)>>,
 }
 
 impl LuaTransformer {
     fn new() -> LuaTransformer {
-        LuaTransformer { file_path: None }
+        LuaTransformer {
+            file_path: None,
+            input_param_list: None,
+        }
     }
 }
 
 impl LuaTransformer {
+    #[inline]
+    fn load_param_list_into_lua_env(&self) {
+        if let Some(input_param_list) = &self.input_param_list {
+            let mut code = String::new();
+            for (key, value) in input_param_list {
+                if value == "true" || value == "1" {
+                    code = code + "rawset(_G, \"" + key + "\", true)\n";
+                } else if value == "false" || value == "0" {
+                    code = code + "rawset(_G, \"" + key + "\", false)\n";
+                } else {
+                    panic!(
+                        "[load_param_list_into_env] invalid value: {}, key: {}",
+                        value, key
+                    )
+                }
+            }
+            code = code + "return \"\"";
+            lua_dostring("[load_param_list_into_lua_env]", &code);
+        }
+    }
+
+    #[inline]
+    fn unload_param_list_from_lua_env(&self) {
+        if let Some(input_param_list) = &self.input_param_list {
+            let mut code = String::new();
+            for (key, _) in input_param_list {
+                code = code + "rawset(_G, \"" + key + "\", nil)\n";
+            }
+            code = code + "return \"\"";
+            lua_dostring("[unload_param_list_from_lua_env]", &code);
+        }
+    }
+
     fn resolve_comp_time(&self, node: FunctionDeclaration) -> FunctionDeclaration {
         assert!(
             node.body().block().last_stmt().is_some(),
@@ -674,12 +711,21 @@ impl LuaTransformer {
             .unwrap_or(empty_token_ref)
             .to_string();
 
-        let comp_time_ret = lua_dostring(
-            &(self.file_path.clone().unwrap_or_default() + " " + parameter_name.as_str()),
-            node.body().block().to_string().as_str(),
-        )
-        .remove_lua_comments()
-        .replace("\n", " "); // The generated code should not have any newlines and comments.
+        let comp_time_ret = {
+            // Make parameter list available to Lua at the compile time context.
+            self.load_param_list_into_lua_env();
+
+            let ret = lua_dostring(
+                &(self.file_path.clone().unwrap_or_default() + " " + parameter_name.as_str()),
+                node.body().block().to_string().as_str(),
+            )
+            .remove_lua_comments()
+            .replace("\n", " "); // The generated code should not have any newlines and comments.
+
+            self.unload_param_list_from_lua_env();
+
+            ret
+        };
 
         // let ret = node
         //     .clone()
@@ -948,6 +994,21 @@ pub fn transform_lua_code(
 
     let mut transformer = LuaTransformer::new();
     transformer.file_path = Some((lua_file_path.to_string()).to_string());
+    transformer.input_param_list = {
+        let mut input_param_list = Vec::new();
+        if let Some(param_table) = param_table.clone() {
+            for (key, value) in param_table {
+                input_param_list.push((key.to_owned(), value));
+            }
+            if input_param_list.len() == 0 {
+                None
+            } else {
+                Some(input_param_list)
+            }
+        } else {
+            None
+        }
+    };
     let new_ast = transformer.visit_ast(ast);
 
     let mut new_content = new_ast.to_string();
