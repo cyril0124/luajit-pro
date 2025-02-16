@@ -1123,7 +1123,10 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
         if let (Some(start), Some(end)) = (start, end) {
             let before = &first_line[..start];
             let after = &first_line[end + 1..];
-            result = format!("{}{}{}", before, serialize_param_table(param_table), after);
+            result = format!("{}{}{}", before, serialize_param_table(param_table), after)
+                .strip_suffix("\n")
+                .unwrap_or_default()
+                .to_string();
         } else {
             result = first_line;
         }
