@@ -252,7 +252,7 @@ static const char *reader_file(lua_State *L, void *ud, size_t *size)
     ctx->is_first_access = 0;
 
     static char first_line_buffer[256];
-    static const char* substring = "--[[luajit-pro]]";
+    static const char* substring = "luajit-pro";
 
     if (fgets(first_line_buffer, sizeof(first_line_buffer), ctx->fp) != NULL) {
       if (strstr(first_line_buffer, substring) != NULL) {
@@ -297,25 +297,37 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
 "   for entry in path:gmatch(\"[^;]+\") do\n"
 "      local slash_name = module_name:gsub(\"%.\", \"/\")\n"
 "      local filename = entry:gsub(\"?\", slash_name)\n"
-"      local luau_filename = filename:gsub(\"%\.lua$\", suffix)\n"
-"      local fd = io.open(luau_filename, \"rb\")\n"
+"      local source_filename = filename:gsub(\"%\.lua$\", suffix)\n"
+"      local fd = io.open(source_filename, \"rb\")\n"
 "      if fd then\n"
-"         return luau_filename, fd, tried\n"
+"         return source_filename, fd, tried\n"
 "      end\n"
-"      table.insert(tried, \"no file '\" .. luau_filename .. \"'\")\n"
+"      table.insert(tried, \"no file '\" .. source_filename .. \"'\")\n"
 "   end\n"
 "   return nil, nil, tried\n"
 "end\n"
 "\n"
-"local function search_module(module_name)\n"
+"local function search_module(module_name, search_dtl)\n"
 "   local found\n"
 "   local fd\n"
 "   local tried = {}\n"
-"   local path = os.getenv(\"LUAU_PATH\") or package.path\n"
-"   found, fd, tried = search_for(module_name, \".luau\", path, tried)\n"
+"   local tl_path = os.getenv(\"TL_PATH\") or package.path\n"
+"   if search_dtl then\n"
+"      found, fd, tried = search_for(module_name, \".d.tl\", tl_path, tried)\n"
+"      if found then\n"
+"         return found, fd\n"
+"      end\n"
+"   end\n"
+"   found, fd, tried = search_for(module_name, \".tl\", tl_path, tried)\n"
 "   if found then\n"
 "      return found, fd\n"
 "   end\n"
+"   local luau_path = os.getenv(\"LUAU_PATH\") or package.path\n"
+"   found, fd, tried = search_for(module_name, \".luau\", luau_path, tried)\n"
+"   if found then\n"
+"      return found, fd\n"
+"   end\n"
+"   local path = os.getenv(\"LUA_PATH\") or package.path\n"
 "   found, fd, tried = search_for(module_name, \".lua\", path, tried)\n"
 "   if found then\n"
 "      return found, fd\n"
@@ -323,8 +335,8 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
 "   return nil, nil, tried\n"
 "end\n"
 "\n"
-"local function luau_package_loader(module_name)\n"
-"   local found_filename, fd, tried = search_module(module_name)\n"
+"local function ljp_package_loader(module_name)\n"
+"   local found_filename, fd, tried = search_module(module_name, true)\n"
 "   if found_filename then\n"
 "      fd:close()\n"
 "      local chunk, err = loadfile(found_filename)\n"
@@ -345,9 +357,9 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
 "end\n"
 "\n"
 "if _G.package.searchers then\n"
-"   table.insert(_G.package.searchers, 2, luau_package_loader)\n"
+"   table.insert(_G.package.searchers, 2, ljp_package_loader)\n"
 "else\n"
-"   table.insert(_G.package.loaders, 2, luau_package_loader)\n"
+"   table.insert(_G.package.loaders, 2, ljp_package_loader)\n"
 "end\n";
     if (luaL_dostring(L, code_str) != LUA_OK) {
       // If execution fails, get the error message

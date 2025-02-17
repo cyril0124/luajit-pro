@@ -1,3 +1,6 @@
 [submodule "luajit2.1"]
 	path = luajit2.1
 	url = https://github.com/cyril0124/luajit2
+[submodule "tl"]
+	path = tl
+	url = https://github.com/cyril0124/tl
