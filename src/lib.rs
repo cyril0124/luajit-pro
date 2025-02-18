@@ -613,7 +613,7 @@ fn inject_global_vals(input: &str, input_param_table: HashMap<&str, String>) -> 
         .parse(input)
         .unwrap_or_else(|error| {
             panic!(
-                "[convert_luau_to_lua] darklua_core could not parse content: {:?}\ncontent:\n{}",
+                "[inject_global_vals] darklua_core could not parse content: {:?}\ncontent:\n{}",
                 error, input
             );
         });
