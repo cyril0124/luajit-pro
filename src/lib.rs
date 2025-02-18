@@ -1380,8 +1380,11 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
                     result = result.strip_suffix("\n").unwrap_or_default().to_string() + " ";
                     result.push_str(&new_content);
                 } else {
-                    let newline_pos = new_content.find('\n').expect("Failed to find newline");
-                    result = format!("{}{}", result.strip_suffix("\n").unwrap_or_default(), &new_content[newline_pos..]);
+                    result = format!(
+                        "{} {}",
+                        result.strip_suffix("\n").unwrap_or_default(),
+                        &new_content
+                    );
                 }
             } else {
                 result.push_str(&new_content);
