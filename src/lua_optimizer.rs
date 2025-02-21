@@ -72,7 +72,7 @@ impl VisitorMut for LuaOptimizer {
                                                         Some(str.token().to_string())
                                                     }
                                                     _ => {
-                                                        println!("[@comp_time_enum] [warn] Unexpected Expression: <{}>, enum_name: {}", value.to_string(), enum_name);
+                                                        println!("[luajit_pro_helper] [@comp_time_enum] Unexpected Expression: <{}>, enum_name: {}", value.to_string(), enum_name);
                                                         None
                                                     }
                                                 };

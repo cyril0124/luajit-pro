@@ -211,7 +211,7 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
                         {
                             let duration = start.elapsed();
                             println!(
-                                "[luajit_pro_heler] Time elapsed(cached) in transform_lua() is: {:?}, file: {}",
+                                "[luajit_pro_helper] Time elapsed(cached) in transform_lua() is: {:?}, file: {}",
                                 duration, lua_file_path
                             );
                             std::io::stdout().flush().unwrap();
@@ -275,7 +275,7 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
     {
         let duration = start.elapsed();
         println!(
-            "[luajit_pro_heler] Time elapsed in transform_lua() is: {:?}, file: {}",
+            "[luajit_pro_helper] Time elapsed in transform_lua() is: {:?}, file: {}",
             duration, lua_file_path
         );
         std::io::stdout().flush().unwrap();

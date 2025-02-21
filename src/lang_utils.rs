@@ -73,9 +73,15 @@ pub fn lua_dostring(code_name: &str, code: &str) -> String {
             Ok(value) => match value {
                 mlua::Value::String(s) => s.to_str().unwrap().to_owned(),
                 mlua::Value::Nil => "".to_owned(),
-                _ => panic!("Expected string bug got {:?}\n----------\n{}\n----------", value, code),
+                _ => panic!(
+                    "Expected string bug got {:?}\n----------\n{}\n----------",
+                    value, code
+                ),
             },
-            Err(err) => panic!("Error evaluating lua code, {}\n----------\n{}\n----------", err, code),
+            Err(err) => panic!(
+                "Error evaluating lua code, {}\n----------\n{}\n----------",
+                err, code
+            ),
         }
     })
 }
