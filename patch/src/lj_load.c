@@ -57,109 +57,13 @@
         }                                                                                                                                                                                                                                                                                                                                                                                                      \
     } while (0)
 
-typedef const char *(* LuaDoStringPtr)(const char*, const char*);
-char *ljp_file_transform(const char *filename, LuaDoStringPtr func);
+char *ljp_file_transform(const char *filename);
 void ljp_string_transform(const char *str, size_t *output_size);
 void luaL_openlibs(lua_State *L);
 
 void ljp_string_file_reset_ptr(const char *filename);
 size_t ljp_string_file_get_content(char *buf, size_t expectSize, const char *filename);
 char ljp_string_file_check_eof(const char *filename);
-
-const char *do_lua_stiring(const char *code_name, const char *str) {
-    static lua_State *L;
-    static char init = 0;
-    static char verbose = 0;
-    if (init == 0) {
-      init = 1;
-
-      char *value = getenv("LJP_VERBOSE_DO_STRING");
-      if (value != NULL && strcmp(value, "1") == 0) {
-          verbose = 1;
-          printf("[luajit-pro] LJP_VERBOSE_DO_STRING is enabled!\n");
-      }
-
-      L = luaL_newstate();
-      luaL_openlibs(L);
-
-      // Preload the code that will be used to transform the code
-      const char *code_str = 
-        "local purple = \"\\27[35m\"\n"
-        "local reset = \"\\27[0m\"\n"
-        "local old_print = print\n"
-        "package.path = package.path .. \";?.lua\" \n"
-        "function print(...) old_print(purple .. \"[comp_time] \" .. _G.__code_name__ .. reset, ...) end\n"
-        "function printf(...) io.write(purple .. \"[comp_time] \" .. _G.__code_name__ .. reset .. \"\t\" .. string.format(...)) end\n"
-        "env_vars = {}\n"
-        "setmetatable(env_vars, {\n"
-        "    __index = function(table, key)\n"
-        "       local value = os.getenv(key)\n"
-        "       if value == nil then\n"
-        "         printf(\"[warn] env_vars[%s] is nill!\\n\", key)\n"
-        "       end\n"
-        "       return os.getenv(key)\n"
-        "   end,\n"
-        "   --[[__newindex = function(table, key, value) os.setenv(key, value) end]]\n" // TODO: 
-        "})\n"
-        "getmetatable('').__index.render = function(template, vars)\n"
-        "  assert(type(template) == \"string\", \"template must be a string\")\n"
-        "  assert(type(vars) == \"table\", \"vars must be a table\")\n"
-        "  return (template:gsub(\"{{(.-)}}\", function(key)\n"
-        "    assert(vars[key], string.format(\"[render] key not found: %s\\n\\ttemplate_str is: %s\\n\", key, template))\n"
-        "    return tostring(vars[key] or \"\")\n"
-        "  end))\n"
-        "end\n"
-        "getmetatable('').__index.strip = function(str, suffix)\n"
-        "  assert(type(suffix) == \"string\", \"suffix must be a string\")\n"
-        "  if str:sub(-#suffix) == suffix then\n"
-        "    return str:sub(1, -#suffix - 1)\n"
-        "  else\n"
-        "    return str\n"
-        "  end\n"
-        "end\n";
-
-      if (luaL_dostring(L, code_str) != LUA_OK) {
-        // If execution fails, get the error message
-        const char *err_msg = lua_tostring(L, -1);
-        printf("Error executing Lua code: %s\n", err_msg);
-        
-        // Clean up the stack by popping the error message
-        lua_pop(L, 1); // Remove the error message from the stack
-
-        lua_close(L); // Close the Lua state
-        printf("code_str " PURPLE_COLOR ">>>\n%s\n<<<" RESET_COLOR "\n", code_str);
-        assert(0 && "Error executing luaCode");
-      }
-    }
-
-    // Set the global variable code_name in Lua
-    lua_pushstring(L, code_name); // Push code_name
-    lua_setglobal(L, "__code_name__"); // Set it as a global variable
-
-    // Execute the Lua string
-    if (luaL_dostring(L, str) != LUA_OK) {
-      // If execution fails, get the error message
-      const char *err_msg = lua_tostring(L, -1);
-      printf("[%s] Error executing Lua code: %s\n", code_name, err_msg);
-      
-      // Clean up the stack by popping the error message
-      lua_pop(L, 1); // Remove the error message from the stack
-
-      lua_close(L); // Close the Lua state
-      printf("code_str >>> " PURPLE_COLOR "\n%s\n" RESET_COLOR "<<<\n", str);
-      assert(0 && "Error executing luaCode");
-    }
-    
-    if (lua_isstring(L, -1)) {
-      const char *ret_code = (char *)lua_tostring(L, -1);
-      if (verbose == 1) {
-        printf("[%s] do_lua_stiring ret_code " PURPLE_COLOR ">>>\n%s\n<<<" RESET_COLOR "\n", code_name, ret_code);
-      }
-      return ret_code;
-    } else {
-      return "";
-    }
-}
 
 #endif // LUAJIT_SYNTAX_EXTEND
 
@@ -256,7 +160,7 @@ static const char *reader_file(lua_State *L, void *ud, size_t *size)
 
     if (fgets(first_line_buffer, sizeof(first_line_buffer), ctx->fp) != NULL) {
       if (strstr(first_line_buffer, substring) != NULL) {
-        char *new_file = ljp_file_transform(ctx->filename, do_lua_stiring);
+        char *new_file = ljp_file_transform(ctx->filename);
         // printf("[Debug]new_file => %s\n", new_file);fflush(stdout);
         if(new_file == NULL) {
           LJP_WARNING("new_file is NULL! Cannot read file: %s, check if this file is empty. errno: %s\n", ctx->filename, strerror(errno));
