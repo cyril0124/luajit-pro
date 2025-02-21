@@ -96,13 +96,13 @@ impl VisitorMut for LuaOptimizer {
                         });
                         if self.enum_map.is_none() {
                             self.enum_map = Some(HashMap::new());
-                            println!("enum: {} => <{:?}>", enum_name, key_value_map);
+                            // println!("enum: {} => <{:#?}>", enum_name, key_value_map);
                             self.enum_map
                                 .as_mut()
                                 .unwrap()
                                 .insert(enum_name.clone(), key_value_map);
                         } else {
-                            println!("enum: {} => <{:?}>", enum_name, key_value_map);
+                            // println!("enum: {} => <{:#?}>", enum_name, key_value_map);
                             self.enum_map
                                 .as_mut()
                                 .unwrap()

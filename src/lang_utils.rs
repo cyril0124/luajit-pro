@@ -68,13 +68,15 @@ pub fn lua_dostring(code_name: &str, code: &str) -> String {
             .globals()
             .set("__code_name__", code_name)
             .expect("Failed to set __code_name__");
-        lua.borrow().load(code).eval::<String>().expect(
-            format!(
-                "Failed to eval code => \n----------\n{}\n----------\n",
-                code
-            )
-            .as_str(),
-        )
+        let ret_val = lua.borrow().load(code).eval::<mlua::Value>();
+        match ret_val {
+            Ok(value) => match value {
+                mlua::Value::String(s) => s.to_str().unwrap().to_owned(),
+                mlua::Value::Nil => "".to_owned(),
+                _ => panic!("Expected string bug got {:?}\n----------\n{}\n----------", value, code),
+            },
+            Err(err) => panic!("Error evaluating lua code, {}\n----------\n{}\n----------", err, code),
+        }
     })
 }
 

@@ -90,11 +90,6 @@ impl LuaTransformer {
     }
 
     fn resolve_comp_time(&self, node: FunctionDeclaration) -> FunctionDeclaration {
-        assert!(
-            node.body().block().last_stmt().is_some(),
-            "Last statement(Return) should not be None"
-        );
-
         // Remove parameters
         let mut parameter_vec: Vec<String> = Vec::new();
         let mut old_parameter_name_token: Option<TokenReference> = None;
