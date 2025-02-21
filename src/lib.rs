@@ -13,10 +13,39 @@ use std::path::Path;
 use std::time::{Duration, Instant, SystemTime};
 
 use full_moon::visitors::VisitorMut;
+use lazy_static::lazy_static;
 use lua_optimizer::LuaOptimizer;
 use lua_transformer::LuaTransformer;
 
 const OUTPUT_DIR: &'static str = ".luajit_pro";
+
+lazy_static! {
+    static ref ENV_NO_CACHE: bool = std::env::var("LJP_NO_CACHE")
+        .map(|v| {
+            let standard_font = figlet_rs::FIGfont::standard().unwrap();
+            println!("{}", standard_font.convert("LJP NO CACHE").unwrap());
+            v == "1"
+        })
+        .unwrap_or(false);
+    static ref ENV_GEN_ONLY: bool = std::env::var("LJP_GEN_ONLY")
+        .map(|v| {
+            let standard_font = figlet_rs::FIGfont::standard().unwrap();
+            println!("{}", standard_font.convert("LJP GEN ONLY").unwrap());
+            v == "1"
+        })
+        .unwrap_or(false);
+    static ref BUILD_CACHE_DIR: String = {
+        let default_dir = format!("{}/build_cache", OUTPUT_DIR);
+        std::env::var("LJP_OUT_DIR").unwrap_or(default_dir)
+    };
+    static ref ENV_NO_OPT: bool = std::env::var("LJP_NO_OPT")
+        .map(|v| {
+            let standard_font = figlet_rs::FIGfont::standard().unwrap();
+            println!("{}", standard_font.convert("LJP NO OPT").unwrap());
+            v == "1"
+        })
+        .unwrap_or(false);
+}
 
 fn get_mtime(file_path: &str) -> SystemTime {
     match std::fs::metadata(file_path) {
@@ -115,8 +144,7 @@ pub fn transform_lua_code(
     };
     let mut new_ast = transformer.visit_ast(ast);
 
-    if first_line.contains("opt") && std::env::var("LJP_NO_OPT").unwrap_or(String::from("0")) == "0"
-    {
+    if first_line.contains("opt") && *ENV_NO_OPT {
         let mut optimizer = LuaOptimizer::new();
         let neww_ast = full_moon::parse(&new_ast.to_string())
             .expect(&format!("Failed to parse: <<<{}>>>", new_ast.to_string()));
@@ -171,13 +199,11 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
         first_line
     };
 
-    let no_cache = first_line.contains("no-cache")
-        || std::env::var("LJP_NO_CACHE").map_or_else(|_| false, |v| v == "1");
+    let no_cache = first_line.contains("no-cache") || *ENV_NO_CACHE || *ENV_GEN_ONLY;
 
-    let build_cache_dir = format!("{}/build_cache", OUTPUT_DIR);
     let cached_file = format!(
         "{}/{}",
-        build_cache_dir,
+        *BUILD_CACHE_DIR,
         Path::new(lua_file_path)
             .file_name()
             .unwrap()
@@ -185,8 +211,8 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
             .unwrap()
     );
 
-    if !std::fs::exists(&build_cache_dir).unwrap_or(false) {
-        std::fs::create_dir_all(&build_cache_dir).expect("Failed to create directory");
+    if !std::fs::exists(&*BUILD_CACHE_DIR).unwrap_or(false) {
+        std::fs::create_dir_all(&*BUILD_CACHE_DIR).expect("Failed to create directory");
     } else {
         if !no_cache {
             if std::fs::exists(&cached_file).unwrap_or(false) {
@@ -267,9 +293,18 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
         new_content
     };
 
-    std::fs::write(cached_file, &new_content).expect("Failed to write to file");
+    std::fs::write(&cached_file, &new_content).expect("Failed to write to file");
 
-    let c_str = CString::new(new_content).unwrap();
+    let c_str = CString::new(if *ENV_GEN_ONLY {
+        println!(
+            "[luajit_pro_helper] [gen only] Output file: {}",
+            cached_file
+        );
+        "".to_owned()
+    } else {
+        new_content
+    })
+    .unwrap();
 
     #[cfg(feature = "print-time")]
     {
