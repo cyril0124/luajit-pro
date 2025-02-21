@@ -144,7 +144,7 @@ pub fn transform_lua_code(
     };
     let mut new_ast = transformer.visit_ast(ast);
 
-    if first_line.contains("opt") && *ENV_NO_OPT {
+    if first_line.contains("opt") && !*ENV_NO_OPT {
         let mut optimizer = LuaOptimizer::new();
         let neww_ast = full_moon::parse(&new_ast.to_string())
             .expect(&format!("Failed to parse: <<<{}>>>", new_ast.to_string()));
