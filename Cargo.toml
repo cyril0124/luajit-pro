@@ -12,7 +12,7 @@ mlua = { version = "0.10.3", features = ["luajit52", "vendored"] }
 [lib]
 name = "luajit_pro_helper"
 path = "src/lib.rs"
-crate-type = ["cdylib", "staticlib"]
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [features]
 print-time = []
