@@ -95,107 +95,6 @@ impl LuaTransformer {
             "Last statement(Return) should not be None"
         );
 
-        // let old_block = node.body().block().to_owned();
-        // let old_last_stmt = old_block.last_stmt().cloned().unwrap();
-        // let new_return = match old_last_stmt.clone() {
-        //     LastStmt::Return(return_node) => return_node
-        //         .clone()
-        //         .with_token(insert_before_token(return_node.clone().token(), "--[==[ "))
-        //         .with_returns(insert_after_punc_expr(
-        //             &return_node.returns().to_owned(),
-        //             " --]==] ",
-        //         )),
-        //     _ => panic!(),
-        // };
-
-        // let new_stmts: Vec<(Stmt, Option<TokenReference>)> = old_block
-        //     .stmts()
-        //     .map(|s| {
-        //         let t = match s.clone() {
-        //             Stmt::LocalAssignment(local_assignment) => {
-        //                 let expr_list =
-        //                     insert_after_punc_expr(local_assignment.expressions(), " --]==]");
-        //                 Stmt::LocalAssignment(
-        //                     local_assignment
-        //                         .clone()
-        //                         .with_local_token(insert_before_token(
-        //                             local_assignment.local_token(),
-        //                             "--[==[ ",
-        //                         ))
-        //                         .with_expressions(expr_list),
-        //                 )
-        //             }
-
-        //             Stmt::Assignment(assignment) => {
-        //                 let var_list = insert_before_punc_var(&assignment.variables(), " --[==[ ");
-        //                 let expr_list = insert_after_punc_expr(assignment.expressions(), " --]==]");
-        //                 Stmt::Assignment(
-        //                     assignment
-        //                         .with_variables(var_list)
-        //                         .with_expressions(expr_list),
-        //                 )
-        //             }
-
-        //             Stmt::NumericFor(numeric_for) => {
-        //                 let new_for_token = insert_before_token(numeric_for.for_token(), "--[==[ ");
-        //                 let new_end_token = insert_after_token(numeric_for.end_token(), " --]==]");
-        //                 Stmt::NumericFor(
-        //                     numeric_for
-        //                         .clone()
-        //                         .with_for_token(new_for_token)
-        //                         .with_end_token(new_end_token),
-        //                 )
-        //             }
-
-        //             Stmt::GenericFor(generic_for) => {
-        //                 let new_for_token = insert_before_token(generic_for.for_token(), "--[==[ ");
-        //                 let new_end_token = insert_after_token(generic_for.end_token(), " --]==]");
-        //                 Stmt::GenericFor(
-        //                     generic_for
-        //                         .clone()
-        //                         .with_for_token(new_for_token)
-        //                         .with_end_token(new_end_token),
-        //                 )
-        //             }
-
-        //             Stmt::Do(do_stmt) => {
-        //                 let new_do_token = insert_before_token(do_stmt.do_token(), "--[==[ ");
-        //                 let new_end_token = insert_after_token(do_stmt.end_token(), " --]==]");
-        //                 Stmt::Do(
-        //                     do_stmt
-        //                         .clone()
-        //                         .with_do_token(new_do_token)
-        //                         .with_end_token(new_end_token),
-        //                 )
-        //             }
-
-        //             Stmt::FunctionCall(func_call) => {
-        //                 let new_prefix = match func_call.prefix() {
-        //                     Prefix::Name(token) => Prefix::Name(insert_before_token(token, "-- ")),
-        //                     Prefix::Expression(expr) => Prefix::Expression(Box::new(
-        //                         insert_before_expr(&expr.to_owned(), " --"),
-        //                     )),
-        //                     _ => panic!("{:?}", func_call.prefix()),
-        //                 };
-        //                 Stmt::FunctionCall(func_call.with_prefix(new_prefix))
-        //             }
-
-        //             Stmt::If(if_stmt) => Stmt::If(
-        //                 if_stmt
-        //                     .clone()
-        //                     .with_if_token(insert_before_token(if_stmt.if_token(), "--[==[ "))
-        //                     .with_end_token(insert_after_token(if_stmt.end_token(), " --]==]")),
-        //             ),
-
-        //             _ => panic!("{:?}", s),
-        //         };
-        //         (t, None)
-        //     })
-        //     .collect();
-        // let new_block = old_block
-        //     .with_last_stmt(Some((LastStmt::Return(new_return), None)))
-        //     .with_stmts(new_stmts);
-
         // Remove parameters
         let mut parameter_vec: Vec<String> = Vec::new();
         let mut old_parameter_name_token: Option<TokenReference> = None;
@@ -218,30 +117,6 @@ impl LuaTransformer {
             parameter_vec.len(),
             parameter_vec.join(", ")
         );
-
-        // let new_func_body = if parameter_vec.len() == 0 {
-        //     node.body()
-        //         .clone()
-        //         .with_end_token(empty_token(node.clone().body().end_token()))
-        //         .with_parameters_parentheses(empty_contained_span(
-        //             node.body().parameters_parentheses(),
-        //         ))
-        //         .with_block(new_block)
-        // } else {
-        //     let mut new_parameters: Punctuated<Parameter> = Punctuated::new();
-        //     new_parameters.push(Pair::new(
-        //         Parameter::Name(empty_token(&old_parameter_name_token.clone().unwrap())),
-        //         None,
-        //     ));
-        //     node.body()
-        //         .clone()
-        //         .with_end_token(empty_token(node.clone().body().end_token()))
-        //         .with_parameters_parentheses(empty_contained_span(
-        //             node.body().parameters_parentheses(),
-        //         ))
-        //         .with_parameters(new_parameters)
-        //         .with_block(new_block)
-        // };
 
         let new_func_body = node
             .body()
@@ -277,15 +152,6 @@ impl LuaTransformer {
 
             ret
         };
-
-        // let ret = node
-        //     .clone()
-        //     .with_function_token(insert_before_token(
-        //         &empty_token(&node.clone().function_token()),
-        //         comp_time_ret.as_str(),
-        //     ))
-        //     .with_name(FunctionName::new(create_punc(&create_empty_token_ref())))
-        //     .with_body(new_func_body);
 
         let ret = node
             .clone()
