@@ -1,4 +1,4 @@
---[[luajit-pro]] --[[no-cache]] --[[format, no-comment]] --[[{FEAT = 1}]]
+--[[luajit-pro, no-cache, opt, format, no-comment, {FEAT = 1}]]
 
 function __LJP:COMP_TIME()
     print("hjjj")
@@ -120,3 +120,19 @@ a = bit.lshift(a, 12345678ULL)
 if _G.FEAT then
     print("hello from inject FEAT")
 end
+
+local --[[@comp_time_enum]] enum = {
+    A = 123,
+    B = 456,
+    C = "hhh"
+ }
+ 
+ if enum.A == var then
+    print("enum.A")
+ elseif var == enum.C then
+    print("enum.C")
+ end
+ 
+ if enum.B == 456 then
+    print("enum.B")
+ end

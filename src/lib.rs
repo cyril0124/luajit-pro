@@ -6,14 +6,15 @@ use std::time::{Duration, Instant, SystemTime};
 use std::{cell::RefCell, env, fs::File, io::Write, str, vec};
 
 use darklua_core::generator::LuaGenerator;
-use darklua_core::rules::Rule;
-use full_moon::ast::{Call, FunctionArgs, Parameter};
+use darklua_core::rules::{Rule, RuleConfiguration, RuleProperties, RulePropertyValue};
+use full_moon::ast::{Call, FunctionArgs, Parameter, Return};
+use full_moon::tokenizer::TokenKind;
 use full_moon::{
     ast::{
         punctuated::{Pair, Punctuated},
         span::ContainedSpan,
-        Expression, FunctionCall, FunctionDeclaration, FunctionName, Index, LastStmt, Prefix, Stmt,
-        Suffix, Var, VarExpression,
+        Expression, Field, FunctionCall, FunctionDeclaration, FunctionName, Index, LastStmt,
+        Prefix, Stmt, Suffix, TableConstructor, Var, VarExpression,
     },
     tokenizer::{Token, TokenReference, TokenType},
     visitors::VisitorMut,
@@ -311,6 +312,12 @@ fn empty_token(token_ref: &TokenReference) -> TokenReference {
     }))
 }
 
+fn replace_token(token_ref: &TokenReference, text: &str) -> TokenReference {
+    token_ref.with_token(Token::new(TokenType::Whitespace {
+        characters: ShortString::new(text),
+    }))
+}
+
 fn empty_contained_span(contained_span: &ContainedSpan) -> ContainedSpan {
     ContainedSpan::new(
         empty_token(contained_span.tokens().0),
@@ -604,6 +611,56 @@ fn create_empty_token_ref() -> TokenReference {
     )
 }
 
+fn get_func_call_name(func_call: &FunctionCall) -> (String, String) {
+    let mut func_call_name = match func_call.prefix() {
+        Prefix::Name(token) => token.token().to_string(),
+        _ => panic!("Unexpected Prefix {:?}", func_call.prefix()),
+    };
+    let mut func_call_arg = String::from("");
+    let suffix_vec = func_call.suffixes().cloned().collect::<Vec<Suffix>>();
+    suffix_vec.iter().for_each(|suffix| match suffix.clone() {
+        Suffix::Index(index) => {
+            match index {
+                Index::Dot { dot, name } => {
+                    func_call_name = format!("{}.{}", func_call_name, name.token().to_string());
+                }
+                _ => panic!("Unexpected Index {:?}", index),
+            };
+        }
+        Suffix::Call(call) => {
+            match call {
+                Call::MethodCall(method_call) => {
+                    func_call_name = format!(
+                        "{}:{}",
+                        func_call_name,
+                        method_call.name().token().to_string()
+                    );
+                    func_call_arg = match method_call.args() {
+                        FunctionArgs::Parentheses {
+                            parentheses,
+                            arguments,
+                        } => {
+                            assert!(
+                                arguments.len() == 1,
+                                "More than 1 arguments, got {} => \"{}\"",
+                                arguments.len(),
+                                arguments.to_string()
+                            );
+                            arguments.to_string()
+                        }
+                        FunctionArgs::String(str) => str.to_string(),
+                        _ => panic!("Unexpected Call {}", method_call.args().to_string()),
+                    };
+                }
+                _ => panic!("Unexpected Call {:?}", suffix),
+            };
+        }
+        _ => panic!("{:?}", suffix),
+    });
+
+    (func_call_name, func_call_arg)
+}
+
 #[inline]
 fn inject_global_vals(input: &str, input_param_table: HashMap<&str, String>) -> String {
     let resources: darklua_core::Resources = darklua_core::Resources::from_memory();
@@ -686,8 +743,18 @@ fn remove_lua_comments(input: &str) -> String {
             panic!("could not parse content: {:?}\ncontent:\n{}\norigin_code:\n----------------------\n{input}\n----------------------", error, input);
         });
 
-    darklua_core::rules::RemoveComments::default()
-        .process(&mut block, &context)
+    let mut rule = darklua_core::rules::RemoveComments::default();
+    rule.configure({
+        let mut properties = HashMap::new();
+        properties.insert(
+            "except".to_string(),
+            RulePropertyValue::StringList(vec!["--\\[\\[@comp_time_enum\\]\\]".to_string()]),
+        );
+        properties
+    })
+    .expect("Failed to configure rule");
+
+    rule.process(&mut block, &context)
         .expect("rule should suceed");
     let mut generator = darklua_core::generator::TokenBasedLuaGenerator::new(input);
     generator.write_block(&block);
@@ -722,6 +789,12 @@ struct LuaTransformer {
     pub file_path: Option<String>,
     pub input_param_list: Option<Vec<(String, String)>>,
 }
+
+struct LuaOptimizer {
+    pub enum_map: Option<HashMap<String, HashMap<String, String>>>,
+}
+
+struct LuaLastReturnRemover;
 
 impl LuaTransformer {
     fn new() -> LuaTransformer {
@@ -973,56 +1046,6 @@ impl LuaTransformer {
     }
 }
 
-fn get_func_call_name(func_call: &FunctionCall) -> (String, String) {
-    let mut func_call_name = match func_call.prefix() {
-        Prefix::Name(token) => token.token().to_string(),
-        _ => panic!("Unexpected Prefix {:?}", func_call.prefix()),
-    };
-    let mut func_call_arg = String::from("");
-    let suffix_vec = func_call.suffixes().cloned().collect::<Vec<Suffix>>();
-    suffix_vec.iter().for_each(|suffix| match suffix.clone() {
-        Suffix::Index(index) => {
-            match index {
-                Index::Dot { dot, name } => {
-                    func_call_name = format!("{}.{}", func_call_name, name.token().to_string());
-                }
-                _ => panic!("Unexpected Index {:?}", index),
-            };
-        }
-        Suffix::Call(call) => {
-            match call {
-                Call::MethodCall(method_call) => {
-                    func_call_name = format!(
-                        "{}:{}",
-                        func_call_name,
-                        method_call.name().token().to_string()
-                    );
-                    func_call_arg = match method_call.args() {
-                        FunctionArgs::Parentheses {
-                            parentheses,
-                            arguments,
-                        } => {
-                            assert!(
-                                arguments.len() == 1,
-                                "More than 1 arguments, got {} => \"{}\"",
-                                arguments.len(),
-                                arguments.to_string()
-                            );
-                            arguments.to_string()
-                        }
-                        FunctionArgs::String(str) => str.to_string(),
-                        _ => panic!("Unexpected Call {}", method_call.args().to_string()),
-                    };
-                }
-                _ => panic!("Unexpected Call {:?}", suffix),
-            };
-        }
-        _ => panic!("{:?}", suffix),
-    });
-
-    (func_call_name, func_call_arg)
-}
-
 impl VisitorMut for LuaTransformer {
     fn visit_function_declaration(&mut self, node: FunctionDeclaration) -> FunctionDeclaration {
         match node.name().to_string().to_uppercase().as_str() {
@@ -1076,7 +1099,10 @@ impl VisitorMut for LuaTransformer {
             return node;
         } else if matches!(
             full_func_name.to_uppercase().as_str(),
-            "__LJP:INCLUDE" | "_G.__LJP:INCLUDE"
+            "__LJP:INCLUDE"
+                | "_G.__LJP:INCLUDE"
+                | "__LJP:INCLUDE_NO_RETURN"
+                | "_G.__LJP:INCLUDE_NO_RETURN"
         ) {
             let new_prefix = {
                 let include_file = lua_dostring(
@@ -1093,6 +1119,12 @@ impl VisitorMut for LuaTransformer {
                         // Recursively transform the included code
                         include_code = transform_lua_code(&include_code, &include_file, None);
                     }
+                }
+
+                if full_func_name.to_uppercase().contains("NO_RETURN") {
+                    let ast = full_moon::parse(&include_code).unwrap();
+                    let mut return_remover = LuaLastReturnRemover::new();
+                    include_code = return_remover.visit_ast(ast).to_string();
                 }
 
                 include_code = include_code.remove_lua_comments().replace("\n", " ");
@@ -1149,6 +1181,210 @@ impl VisitorMut for LuaTransformer {
         } else {
             return node;
         }
+    }
+}
+
+impl LuaOptimizer {
+    fn new() -> LuaOptimizer {
+        LuaOptimizer { enum_map: None }
+    }
+}
+
+impl VisitorMut for LuaOptimizer {
+    fn visit_stmt(&mut self, node: Stmt) -> Stmt {
+        match node.clone() {
+            Stmt::LocalAssignment(local_assignment) => {
+                let local_tk = local_assignment.local_token();
+                let mut has_annotation = false;
+                local_tk.trailing_trivia().into_iter().for_each(|trivia| {
+                    match trivia.token_type() {
+                        TokenType::MultiLineComment { blocks, comment } => {
+                            if blocks == &0 && comment.as_str() == "@comp_time_enum" {
+                                has_annotation = true;
+                            }
+                        }
+                        _ => {}
+                    };
+                });
+
+                if has_annotation {
+                    let name_vec: Vec<String> = local_assignment
+                        .names()
+                        .pairs()
+                        .map(|n| {
+                            let name_tk = n.clone().into_value();
+                            name_tk.token().to_string()
+                        })
+                        .collect();
+                    if name_vec.len() == 1 {
+                        let enum_name = name_vec.first().unwrap();
+                        assert!(
+                            local_assignment.expressions().pairs().count() == 1,
+                            "[@comp_time_enum] Only support one expression!"
+                        );
+                        let mut key_value_map = HashMap::new();
+                        local_assignment.expressions().pairs().for_each(|e| {
+                            let expr = e.clone().into_value();
+                            match expr {
+                                Expression::TableConstructor(tbl_constructor) => {
+                                    tbl_constructor
+                                        .fields()
+                                        .iter()
+                                        .for_each(|field| match field {
+                                            Field::NameKey {
+                                                key,
+                                                equal: _,
+                                                value,
+                                            } => {
+                                                let v = match value {
+                                                    Expression::Number(number) => {
+                                                        Some(number.token().to_string())
+                                                    }
+                                                    Expression::String(str) => {
+                                                        Some(str.token().to_string())
+                                                    }
+                                                    _ => {
+                                                        println!("[@comp_time_enum] [warn] Unexpected Expression: <{}>, enum_name: {}", value.to_string(), enum_name);
+                                                        None
+                                                    }
+                                                };
+                                                if v.is_some() {
+                                                    key_value_map.insert(key.token().to_string(), v.unwrap());
+                                                }
+                                            }
+                                            Field::ExpressionKey {
+                                                brackets: _,
+                                                key: _,
+                                                equal: _,
+                                                value: _,
+                                            } => {
+                                                todo!("{}", field.to_string())
+                                            }
+                                            _ => {}
+                                        });
+                                }
+                                _ => panic!("[@comp_time_enum] Unexpected Expression: {:?}", expr),
+                            }
+                        });
+                        if self.enum_map.is_none() {
+                            self.enum_map = Some(HashMap::new());
+                            println!("enum: {} => <{:?}>", enum_name, key_value_map);
+                            self.enum_map
+                                .as_mut()
+                                .unwrap()
+                                .insert(enum_name.clone(), key_value_map);
+                        } else {
+                            println!("enum: {} => <{:?}>", enum_name, key_value_map);
+                            self.enum_map
+                                .as_mut()
+                                .unwrap()
+                                .insert(enum_name.clone(), key_value_map);
+                        }
+                    } else {
+                        panic!("[@comp_time_enum] Should only have one enum name!");
+                    }
+                }
+
+                node
+            }
+            _ => node,
+        }
+    }
+
+    fn visit_var(&mut self, node: Var) -> Var {
+        match &node {
+            Var::Expression(var_expr) => {
+                // Replace enum expression with its value
+                if self.enum_map.is_none() {
+                    return node;
+                }
+
+                let name = match &var_expr.prefix() {
+                    Prefix::Name(name) => Some(name.token().to_string()),
+                    _ => None,
+                };
+
+                if name.is_none() {
+                    return node;
+                }
+
+                let mut new_suffixes: Vec<Suffix> = Vec::new();
+                let mut enum_value = String::new();
+                let mut enum_expr = String::new();
+                if let Some(enum_key) = name {
+                    if let Some(enum_map) = self.enum_map.as_ref().unwrap().get(&enum_key) {
+                        let suffixes: Vec<&Suffix> = var_expr.suffixes().into_iter().collect();
+                        if suffixes.len() == 1 {
+                            let suffix = suffixes.first().cloned().unwrap();
+                            match suffix {
+                                Suffix::Index(index) => match index {
+                                    Index::Brackets {
+                                        brackets: _,
+                                        expression: _,
+                                    } => {
+                                        todo!()
+                                    }
+                                    Index::Dot { dot, name } => {
+                                        if let Some(v) = enum_map.get(&name.token().to_string()) {
+                                            enum_value = v.clone();
+                                            enum_expr =
+                                                enum_key + "." + name.token().to_string().as_str();
+                                            new_suffixes.push(Suffix::Index(Index::Dot {
+                                                dot: empty_token(dot),
+                                                name: empty_token(name),
+                                            }));
+                                        }
+                                    }
+                                    _ => {}
+                                },
+                                _ => {}
+                            }
+                        }
+                    } else {
+                        return node;
+                    }
+                }
+                let has_valid_enum_expr = new_suffixes.len() > 0;
+                if has_valid_enum_expr {
+                    let new_prefix: Prefix = if let Prefix::Name(name) = var_expr.prefix() {
+                        Prefix::Name(replace_token(
+                            name,
+                            format!("{enum_value} --[[{enum_expr}]]").as_str(),
+                        ))
+                    } else {
+                        unreachable!()
+                    };
+                    Var::Expression(Box::new(
+                        var_expr
+                            .clone()
+                            .with_suffixes(new_suffixes)
+                            .with_prefix(new_prefix),
+                    ))
+                } else {
+                    node
+                }
+            }
+            _ => node,
+        }
+    }
+}
+
+impl LuaLastReturnRemover {
+    fn new() -> Self {
+        LuaLastReturnRemover {}
+    }
+}
+
+impl VisitorMut for LuaLastReturnRemover {
+    fn visit_last_stmt(&mut self, node: LastStmt) -> LastStmt {
+        let new_node = match &node {
+            LastStmt::Return(ret) => {
+                LastStmt::Return(Return::new().with_token(empty_token(ret.token())))
+            }
+            _ => panic!("Cannot find `return`!"),
+        };
+
+        new_node
     }
 }
 
@@ -1248,7 +1484,15 @@ pub fn transform_lua_code(
             None
         }
     };
-    let new_ast = transformer.visit_ast(ast);
+    let mut new_ast = transformer.visit_ast(ast);
+
+    if first_line.contains("opt") && std::env::var("LJP_NO_OPT").unwrap_or(String::from("0")) == "0"
+    {
+        let mut optimizer = LuaOptimizer::new();
+        let neww_ast = full_moon::parse(&new_ast.to_string())
+            .expect(&format!("Failed to parse: <<<{}>>>", new_ast.to_string()));
+        new_ast = optimizer.visit_ast(neww_ast);
+    }
 
     let mut new_content = new_ast.to_string();
 
