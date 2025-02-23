@@ -368,6 +368,9 @@ pub fn convert_luau_to_lua(input: &str) -> String {
     darklua_core::rules::RemoveEmptyDo::default()
         .process(&mut block, &context)
         .expect("Failed to remove empty do");
+    darklua_core::rules::RemoveUnusedVariable::default()
+        .process(&mut block, &context)
+        .expect("Failed to remove unused variables");
 
     let mut generator = darklua_core::generator::TokenBasedLuaGenerator::new(input);
     generator.write_block(&block);
@@ -400,6 +403,9 @@ pub fn inject_global_vals(input: &str, input_param_table: HashMap<&str, String>)
     darklua_core::rules::RemoveEmptyDo::default()
         .process(&mut block, &context)
         .expect("Failed to remove empty do");
+    darklua_core::rules::RemoveUnusedVariable::default()
+        .process(&mut block, &context)
+        .expect("Failed to remove unused variables");
 
     let mut generator = darklua_core::generator::TokenBasedLuaGenerator::new(input);
     generator.write_block(&block);
