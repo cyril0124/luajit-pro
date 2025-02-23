@@ -101,6 +101,39 @@ pub fn convert_teal_to_lua(input_file_name: &str, syntax_only: bool) -> String {
 _G.package.path = package.path .. ";{CARGO_PATH}/tl/?.lua"
 local tl = require "tl"
 
+local turbo
+local is_turbo_on
+do
+   local tl_lex = tl.lex
+   local turbo_is_on = false
+
+   turbo = function(on)
+      if on then
+         if jit then
+            jit.off()
+            tl.lex = function(input, filename)
+               jit.on()
+               local r1, r2 = tl_lex(input, filename)
+               jit.off()
+               return r1, r2
+            end
+         end
+         collectgarbage("stop")
+      else
+         if jit then
+            jit.on()
+            tl.lex = tl_lex
+         end
+         collectgarbage("restart")
+      end
+      turbo_is_on = on
+   end
+
+   is_turbo_on = function()
+      return turbo_is_on
+   end
+end
+
 local function die(msg)
     assert(false, msg)
 end
@@ -230,6 +263,7 @@ do
 end
 
 local function teal_to_lua(input_file_name, syntax_only)
+    turbo(true)
     local tlconfig = {{
         include_dir = {{}},
         disable_warnings = {{}},
@@ -271,6 +305,7 @@ local function teal_to_lua(input_file_name, syntax_only)
     local _, any_syntax_err, _, _ = report_all_errors(tlconfig, env, syntax_only or false)
     assert(not any_syntax_err, "Failed to generate Lua code(syntax error found!)")
 
+    turbo(false)
     return ret_code
 end
 
