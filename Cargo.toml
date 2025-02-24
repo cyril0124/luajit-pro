@@ -10,6 +10,9 @@ stylua = { version = "2.0.2", features = ["lua53", "lua52", "luau", "luajit"] }
 mlua = { version = "0.10.3", features = ["luajit52", "vendored"] }
 figlet-rs = "0.1.5"
 lazy_static = "1.5.0"
+env_logger = "0.11.6"
+log = "0.4.26"
+static_init = "1.0.3"
 
 [lib]
 name = "luajit_pro_helper"
@@ -17,4 +20,6 @@ path = "src/lib.rs"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [features]
+default = []
 print-time = []
+debug = []

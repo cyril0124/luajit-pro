@@ -19,6 +19,12 @@ use lua_transformer::LuaTransformer;
 
 const OUTPUT_DIR: &'static str = ".luajit_pro";
 
+#[cfg(feature = "debug")]
+#[static_init::constructor(0)]
+extern "C" fn env_logger_init() {
+    env_logger::init();
+}
+
 lazy_static! {
     static ref ENV_NO_CACHE: bool = std::env::var("LJP_NO_CACHE")
         .map(|v| {
@@ -73,6 +79,10 @@ fn parse_param_table(line: &str) -> (Option<HashMap<&str, String>>, bool) {
             let key = k.trim();
             let default_value = v.trim();
             let current_value = std::env::var(key).unwrap_or(default_value.to_string());
+
+            #[cfg(feature = "debug")]
+            log::debug!("[parse_param_table] key: {k} default_value: {default_value} current_value: {current_value} match: {}", default_value == current_value);
+
             if !need_rebuild {
                 need_rebuild = default_value != current_value;
             }
@@ -108,6 +118,9 @@ pub fn transform_lua_code(
     lua_file_path: &str,
     param_table: Option<HashMap<&str, String>>,
 ) -> String {
+    #[cfg(feature = "debug")]
+    let debug_prefix = format!("[transform_lua_code] <{lua_file_path}>");
+
     let first_line = code.lines().next().unwrap_or("");
 
     let final_code = if first_line.contains("teal") {
@@ -166,14 +179,23 @@ pub fn transform_lua_code(
     }
 
     if first_line.contains("pretty") {
+        #[cfg(feature = "debug")]
+        log::debug!("{debug_prefix} pretty");
+
         // pretty == no-comment + format
         new_content = lang_utils::format_lua_code(&lang_utils::remove_lua_comments(&new_content));
     } else {
         if first_line.contains("no-comment") {
+            #[cfg(feature = "debug")]
+            log::debug!("{debug_prefix} no-comment");
+
             new_content = lang_utils::remove_lua_comments(&new_content);
         }
 
         if first_line.contains("format") {
+            #[cfg(feature = "debug")]
+            log::debug!("{debug_prefix} format");
+
             new_content = lang_utils::format_lua_code(&new_content);
         }
     }
@@ -211,11 +233,35 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
             .unwrap()
     );
 
+    #[cfg(feature = "debug")]
+    let debug_prefix = format!("[transform_lua] <{lua_file_path}>");
+
+    #[cfg(feature = "debug")]
+    log::debug!(
+        "{debug_prefix} first_line: \"{}\"",
+        first_line.strip_suffix("\n").unwrap_or_default()
+    );
+
+    #[cfg(feature = "debug")]
+    log::debug!(
+        "{debug_prefix} no_cache: {no_cache} gen_only: {}",
+        ENV_GEN_ONLY.clone()
+    );
+
     if !std::fs::exists(&*BUILD_CACHE_DIR).unwrap_or(false) {
         std::fs::create_dir_all(&*BUILD_CACHE_DIR).expect("Failed to create directory");
+
+        #[cfg(feature = "debug")]
+        log::debug!(
+            "{debug_prefix} create cache dir at {}",
+            BUILD_CACHE_DIR.clone()
+        );
     } else {
         if !no_cache {
             if std::fs::exists(&cached_file).unwrap_or(false) {
+                #[cfg(feature = "debug")]
+                log::debug!("{debug_prefix} use cache file");
+
                 if get_mtime(&lua_file_path) <= get_mtime(&cached_file) {
                     let cached_first_line = {
                         let file = File::open(&cached_file)
@@ -227,7 +273,10 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
                         first_line
                     };
 
-                    let (_, need_rebuild) = parse_param_table(&cached_first_line);
+                    let (param_table, need_rebuild) = parse_param_table(&cached_first_line);
+
+                    #[cfg(feature = "debug")]
+                    log::debug!("{debug_prefix} cache_first_line: {} need_rebuild: {need_rebuild} parm_table: {param_table:?}", cached_first_line.strip_suffix("\n").unwrap_or_default());
 
                     if !need_rebuild {
                         let code = std::fs::read_to_string(&cached_file).unwrap();
@@ -251,6 +300,10 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
     }
 
     let (param_table, _) = parse_param_table(&first_line);
+
+    #[cfg(feature = "debug")]
+    log::debug!("{debug_prefix} parm_table: {param_table:?}");
+
     let content = std::fs::read_to_string(lua_file_path).unwrap();
     let new_content = transform_lua_code(&content, lua_file_path, param_table.clone());
 
@@ -259,17 +312,37 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
         let start = first_line.find("{");
         let end = first_line.rfind('}');
         let mut result = if let (Some(start), Some(end)) = (start, end) {
-            let before = &first_line[..start];
-            let after = &first_line[end + 1..];
-            format!("{}{}{}", before, serialize_param_table(param_table), after)
+            let before = &old_first_line[..start];
+            let after = &old_first_line[end + 1..];
+            let serialized_param = serialize_param_table(param_table);
+
+            #[cfg(feature = "debug")]
+            log::debug!("{debug_prefix} before: <{before}> serialized_param: <{serialized_param}> after: <{after}>");
+
+            let ret = format!("{}{}{}", before, serialized_param, after)
                 .strip_suffix("\n")
                 .unwrap_or_default()
-                .to_string()
+                .to_string();
+
+            #[cfg(feature = "debug")]
+            log::debug!("{debug_prefix} result_new_line: <{ret}>");
+
+            ret
         } else {
+            #[cfg(feature = "debug")]
+            log::debug!("{debug_prefix} Could not find start or end of first line, use original first line: <{}>", first_line);
+
             first_line
         };
 
         let new_first_line = &new_content[..first_newline_pos];
+
+        #[cfg(feature = "debug")]
+        log::debug!(
+            "{debug_prefix} old_first_line: <{}> new_first_line: <{new_first_line}> result_first_line: <{result}>",
+            old_first_line.strip_suffix("\n").unwrap_or_default()
+        );
+
         if new_first_line.contains("luajit-pro") {
             result.push_str(&new_content[first_newline_pos..]);
         } else {
@@ -278,11 +351,7 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
                     result = result.strip_suffix("\n").unwrap_or_default().to_string() + " ";
                     result.push_str(&new_content);
                 } else {
-                    result = format!(
-                        "{} {}",
-                        result.strip_suffix("\n").unwrap_or_default(),
-                        &new_content
-                    );
+                    result = format!("{result} {}", &new_content);
                 }
             } else {
                 result.push_str(&new_content);
@@ -290,8 +359,14 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
         }
         result
     } else {
+        #[cfg(feature = "debug")]
+        log::debug!("{debug_prefix} No newline found!");
+
         new_content
     };
+
+    #[cfg(feature = "debug")]
+    log::trace!("{debug_prefix} new_content:\n----------\n{new_content}\n----------\n");
 
     std::fs::write(&cached_file, &new_content).expect("Failed to write to file");
 
