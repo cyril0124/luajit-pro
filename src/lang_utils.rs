@@ -1,3 +1,4 @@
+use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::{cell::RefCell, env, str, vec};
 
@@ -8,13 +9,14 @@ use mlua::prelude::*;
 const CARGO_PATH: &'static str = env!("CARGO_MANIFEST_DIR");
 pub fn lua_dostring(code_name: &str, code: &str) -> String {
     thread_local! {
-        static LUA: RefCell<Lua> = RefCell::new(unsafe {
+        static LUA: UnsafeCell<Lua> = UnsafeCell::new(unsafe {
             let lua = Lua::unsafe_new();
             lua.load(r#"
     _G.__code_name__ = "[Anonymous]"
     local purple = "\27[35m"
     local reset = "\27[0m"
     local old_print = print
+    local f = string.format
     package.path = package.path .. ";?.lua"
     
     function print(...)
@@ -22,7 +24,87 @@ pub fn lua_dostring(code_name: &str, code: &str) -> String {
     end
     
     function printf(...)
-        io.write(purple .. "[comp_time] " .. _G.__code_name__ .. reset .. "\t" .. string.format(...))
+        io.write(purple .. "[comp_time] " .. _G.__code_name__ .. reset .. "\t" .. f(...))
+    end
+
+    local output_content = ""
+    _G.output = function(...)
+        local args = {...}
+        local str = args[1]
+
+        -- Get upvalues from the caller
+        local level = 2
+        local i = 1
+        local upvalues = {}
+        while true do
+            local name, value = debug.getlocal(level, i)
+            if not name then break end
+            upvalues[name] = value
+            i = i + 1
+        end
+
+        -- Replace {{key}} with the value of the key in the upvalues
+        local str = str:gsub("{{(.-)}}", function(key)
+            assert(upvalues[key], f("[output] key not found: %s\n\ttemplate_str is: %s\n", key, str))
+            return tostring(upvalues[key] or "")
+        end)
+
+        output_content = output_content .. " " .. str .. " "
+    end
+    _G.outputf = function(...)
+        local args = {...}
+        local str = args[1]
+
+        -- Get upvalues from the caller
+        local level = 2
+        local i = 1
+        local upvalues = {}
+        while true do
+            local name, value = debug.getlocal(level, i)
+            if not name then break end
+            upvalues[name] = value
+            i = i + 1
+        end
+
+        -- Replace {{key}} with the value of the key in the upvalues
+        local str = str:gsub("{{(.-)}}", function(key)
+            assert(upvalues[key], f("[output] key not found: %s\n\ttemplate_str is: %s\n", key, str))
+            return tostring(upvalues[key] or "")
+        end)
+
+        -- Call the function with the formatted string and the rest of the arguments
+        local ret = f(str, table.unpack(args, 2))
+        output_content = output_content .. " " .. ret .. " "
+    end
+    _G.out = _G.output
+    _G.outf = _G.outputf
+    _G.o = _G.output
+    _G.of = _G.outputf
+
+    _G.get_output = function()
+        local out = output_content
+        output_content = ""
+        return out
+    end
+
+    _G.render = function(str)
+        -- Get upvalues from the caller
+        local level = 2
+        local i = 1
+        local upvalues = {}
+        while true do
+            local name, value = debug.getlocal(level, i)
+            if not name then break end
+            upvalues[name] = value
+            i = i + 1
+        end
+
+        local str = str:gsub("{{(.-)}}", function(key)
+            assert(upvalues[key], f("[render] key not found: %s\n\ttemplate_str is: %s\n", key, str))
+            return tostring(upvalues[key] or "")
+        end)
+
+        return str
     end
     
     _G.env_vars = {}
@@ -64,25 +146,29 @@ pub fn lua_dostring(code_name: &str, code: &str) -> String {
         });
     }
     LUA.with(|lua| {
-        lua.borrow()
-            .globals()
+        let lua = unsafe { &mut *lua.get() };
+        lua.globals()
             .set("__code_name__", code_name)
             .expect("Failed to set __code_name__");
-        let ret_val = lua.borrow().load(code).eval::<mlua::Value>();
-        match ret_val {
-            Ok(value) => match value {
-                mlua::Value::String(s) => s.to_str().unwrap().to_owned(),
-                mlua::Value::Nil => "".to_owned(),
-                _ => panic!(
-                    "Expected string bug got {:?}\n----------\n{}\n----------",
-                    value, code
+        let ret_val = lua.load(code).eval::<mlua::Value>();
+        let get_output: LuaFunction = lua.globals().get("get_output").unwrap();
+        let output_str: String = get_output.call::<String>(()).unwrap();
+        output_str
+            + (match ret_val {
+                Ok(value) => match value {
+                    mlua::Value::String(s) => s.to_str().unwrap().to_owned(),
+                    mlua::Value::Nil => "".to_owned(),
+                    _ => panic!(
+                        "Expected string bug got {:?}\n----------\n{}\n----------",
+                        value, code
+                    ),
+                },
+                Err(err) => panic!(
+                    "Error evaluating lua code, {}\n----------\n{}\n----------",
+                    err, code
                 ),
-            },
-            Err(err) => panic!(
-                "Error evaluating lua code, {}\n----------\n{}\n----------",
-                err, code
-            ),
-        }
+            })
+            .as_str()
     })
 }
 
