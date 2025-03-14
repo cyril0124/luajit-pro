@@ -136,12 +136,16 @@ impl LuaTransformer {
             // Make parameter list available to Lua at the compile time context.
             self.load_param_list_into_lua_env();
 
-            let ret = lang_utils::lua_dostring(
+            let (mut ret, keep_line) = lang_utils::lua_dostring(
                 &(self.file_path.clone().unwrap_or_default() + " " + parameter_name.as_str()),
                 node.body().block().to_string().as_str(),
-            )
-            .remove_lua_comments()
-            .replace("\n", " "); // The generated code should not have any newlines and comments.
+            );
+
+            if keep_line {
+                ret = ret.remove_lua_comments();
+            } else {
+                ret = ret.remove_lua_comments().replace("\n", " ");
+            }
 
             self.unload_param_list_from_lua_env();
 
@@ -222,7 +226,7 @@ impl VisitorMut for LuaTransformer {
                 | "_G.__LJP:INCLUDE_NO_RETURN"
         ) {
             let new_prefix = {
-                let include_file = lang_utils::lua_dostring(
+                let (include_file, _) = lang_utils::lua_dostring(
                     "__LJP:INCLUDE",
                     &format!(
                         "return assert(package.searchpath({}, package.path))",
