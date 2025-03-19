@@ -17,7 +17,7 @@ static_init = "1.0.3"
 [lib]
 name = "luajit_pro_helper"
 path = "src/lib.rs"
-crate-type = ["lib", "cdylib", "staticlib"]
+crate-type = ["lib", "staticlib"]
 
 [features]
 default = []
