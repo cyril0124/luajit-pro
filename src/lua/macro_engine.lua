@@ -19,6 +19,7 @@ local output_content = ""
 _G.output = function(...)
 	local args = { ... }
 	local str = args[1]
+	local values = args[2]
 
 	-- Get upvalues from the caller
 	local level = 2
@@ -41,8 +42,17 @@ _G.output = function(...)
 
 	-- Replace {{key}} with the value of the key in the upvalues
 	local str = str:gsub("{{(.-)}}", function(key)
-		assert(upvalues[key], f("[output] key not found: %s\n\ttemplate_str is: %s\n", key, str))
-		return tostring(upvalues[key] or "")
+		local v
+		if type(values) == "table" then
+			v = values[key]
+		end
+
+		if not v then
+			v = upvalues[key]
+		end
+
+		assert(v, f("[output] key not found: %s\n\ttemplate_str is: %s\n", key, str))
+		return tostring(v)
 	end)
 
 	output_content = output_content .. " " .. str .. " "
@@ -50,6 +60,7 @@ end
 _G.outputf = function(...)
 	local args = { ... }
 	local str = args[1]
+	local values = args[2]
 
 	-- Get upvalues from the caller
 	local level = 2
@@ -72,8 +83,17 @@ _G.outputf = function(...)
 
 	-- Replace {{key}} with the value of the key in the upvalues
 	local str = str:gsub("{{(.-)}}", function(key)
-		assert(upvalues[key], f("[output] key not found: %s\n\ttemplate_str is: %s\n", key, str))
-		return tostring(upvalues[key] or "")
+		local v
+		if type(values) == "table" then
+			v = values[key]
+		end
+
+		if not v then
+			v = upvalues[key]
+		end
+
+		assert(v, f("[output] key not found: %s\n\ttemplate_str is: %s\n", key, str))
+		return tostring(v)
 	end)
 
 	-- Call the function with the formatted string and the rest of the arguments
