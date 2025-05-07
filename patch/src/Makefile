@@ -229,7 +229,7 @@ TARGET_DYNXLDOPTS=
 TARGET_LFSFLAGS= -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE
 TARGET_XCFLAGS= $(TARGET_LFSFLAGS) -U_FORTIFY_SOURCE
 TARGET_XLDFLAGS=
-TARGET_XLIBS= -lm -Wl,-rpath,$(realpath $(PWD)/../target/release) -L$(realpath $(PWD)/../target/release) -lluajit_pro_helper
+TARGET_XLIBS= -lm -lpthread -Wl,-rpath,$(realpath $(PWD)/../target/release) -L$(realpath $(PWD)/../target/release) -lluajit_pro_helper
 TARGET_TCFLAGS= $(CCOPTIONS) $(TARGET_XCFLAGS) $(TARGET_FLAGS) $(TARGET_CFLAGS)
 TARGET_ACFLAGS= $(CCOPTIONS) $(TARGET_XCFLAGS) $(TARGET_FLAGS) $(TARGET_CFLAGS)
 TARGET_ASFLAGS= $(ASOPTIONS) $(TARGET_XCFLAGS) $(TARGET_FLAGS) $(TARGET_CFLAGS)
