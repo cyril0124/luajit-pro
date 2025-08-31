@@ -22,7 +22,7 @@ const OUTPUT_DIR: &'static str = ".luajit_pro";
 #[cfg(feature = "debug")]
 #[static_init::constructor(0)]
 extern "C" fn env_logger_init() {
-    env_logger::try_init();
+    let _ = env_logger::try_init();
 }
 
 lazy_static! {

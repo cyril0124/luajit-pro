@@ -6,13 +6,16 @@ use darklua_core::generator::LuaGenerator;
 use darklua_core::rules::{Rule, RuleConfiguration, RulePropertyValue};
 use mlua::prelude::*;
 
-const CARGO_PATH: &'static str = env!("CARGO_MANIFEST_DIR");
 pub fn lua_dostring(code_name: &str, code: &str) -> (String, bool) {
     thread_local! {
         static LUA: UnsafeCell<Lua> = UnsafeCell::new({
             let lua = unsafe { Lua::unsafe_new() };
-            let dofile: LuaFunction = lua.globals().get("dofile").unwrap();
-            dofile.call::<()>(format!("{CARGO_PATH}/src/lua/macro_engine.lua")).unwrap();
+
+            let macro_engine_script = include_str!("lua/macro_engine.lua");
+            let macro_engine_chunk = lua.load(macro_engine_script).set_name("lua/macro_engine.lua");
+            if let Err(e) = macro_engine_chunk.exec() {
+                panic!("Failed to load macro_engine: {}", e);
+            };
 
             lua
         });
@@ -57,9 +60,19 @@ pub fn convert_teal_to_lua(input_file_name: &str, syntax_only: bool) -> String {
     thread_local! {
         static LUA: UnsafeCell<Lua> = UnsafeCell::new({
             let lua = unsafe { Lua::unsafe_new() };
-            let dofile: LuaFunction = lua.globals().get("dofile").unwrap();
-            lua.load(&format!(r#"_G.package.path = package.path .. ";{CARGO_PATH}/tl/?.lua""#)).exec().unwrap();
-            dofile.call::<()>(format!("{CARGO_PATH}/src/lua/teal_to_lua.lua")).unwrap();
+
+            let tl_script = include_str!("../tl/tl.lua");
+            let tl_chunk = lua.load(tl_script).set_name("tl/tl.lua");
+            if let Err(e) = tl_chunk.exec() {
+                panic!("Failed to load tl/tl: {}", e);
+            };
+
+            let teal_to_lua_script = include_str!("lua/teal_to_lua.lua");
+            let teal_to_lua_chunk = lua.load(teal_to_lua_script).set_name("teal_to_lua.lua");
+            if let Err(e) = teal_to_lua_chunk.exec() {
+                panic!("Failed to load teal_to_lua: {}", e);
+            };
+
             lua
         });
     }
