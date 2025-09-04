@@ -296,7 +296,8 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
 #ifdef LUAJIT_SYNTAX_EXTEND
   // Save filename to ctx
   if(filename == NULL) {
-    assert(0 && "filename is NULL!\n");
+    lua_pushfstring(L, "filename is nil");
+    return LUA_ERRFILE;
   } else {
     snprintf(ctx.filename, sizeof(ctx.filename), "%s", filename);
   }
