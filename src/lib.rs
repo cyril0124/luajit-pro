@@ -12,6 +12,7 @@ use std::io::{BufRead, Write};
 use std::path::Path;
 use std::time::{Duration, Instant, SystemTime};
 
+use fslock::LockFile;
 use full_moon::visitors::VisitorMut;
 use lazy_static::lazy_static;
 use lua_optimizer::LuaOptimizer;
@@ -304,6 +305,23 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
     #[cfg(feature = "debug")]
     log::debug!("{debug_prefix} parm_table: {param_table:?}");
 
+    let lockfile_path = format!("{}.lock", cached_file);
+    let mut lockfile = match LockFile::open(lockfile_path.as_str()) {
+        Ok(f) => f,
+        Err(e) => {
+            panic!(
+                "Failed to open lock file, path: {}, error: {}",
+                lockfile_path, e
+            );
+        }
+    };
+    if let Err(e) = lockfile.lock() {
+        panic!(
+            "[acquire_lock] Failed to lock, path: {}, err: {}",
+            lockfile_path, e
+        );
+    }
+
     let content = std::fs::read_to_string(lua_file_path).unwrap();
     let new_content = transform_lua_code(&content, lua_file_path, param_table.clone());
 
@@ -389,6 +407,10 @@ pub fn transform_lua(file_path: *const c_char) -> *const c_char {
             duration, lua_file_path
         );
         std::io::stdout().flush().unwrap();
+    }
+
+    if let Err(e) = lockfile.unlock() {
+        panic!("Failed to unlock, path: {}, err: {}", lockfile_path, e);
     }
 
     c_str.into_raw()
