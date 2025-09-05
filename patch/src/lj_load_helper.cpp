@@ -99,7 +99,7 @@ const char *ljp_file_transform(const char *filename) {
     if (stringMap.find(filenameStr) == stringMap.end()) {
         stringMap.emplace(filenameStr, StringFile{std::string(content), 0});
     } else {
-        LJP_ASSERT(false, "Duplicate file: %s", filename);
+        LJP_WARNING("Duplicate file: %s in stringMap\n", filename);
     }
 
     return filename;
